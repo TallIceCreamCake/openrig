@@ -1,0 +1,24 @@
+{
+  "generatedAt": "2026-02-27T10:28:48.535Z",
+  "filename": "openrig-full-export-2026-02-27T10-28-48-535Z.zip",
+  "sections": {
+    "local": {
+      "serverDataFiles": 6,
+      "publicFiles": 0,
+      "supabaseFiles": 51,
+      "envIncluded": true,
+      "packageIncluded": true
+    },
+    "database": {
+      "dumpIncluded": true,
+      "mode": "local",
+      "schemaFile": true,
+      "dataFile": true
+    },
+    "storage": {
+      "bucketCount": 2,
+      "fileCount": 0
+    }
+  },
+  "warnings": []
+}

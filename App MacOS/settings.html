@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Paramètres — OpenRIG</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #f5f5f7;
+      --sidebar-bg: #e8e8ed;
+      --content-bg: #ffffff;
+      --text: #1d1d1f;
+      --text-secondary: #6e6e73;
+      --border: rgba(0,0,0,0.1);
+      --accent: #0071e3;
+      --sidebar-item-active: rgba(0,0,0,0.08);
+      --sidebar-item-hover: rgba(0,0,0,0.05);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #1c1c1e;
+        --sidebar-bg: #2c2c2e;
+        --content-bg: #3a3a3c;
+        --text: #f5f5f7;
+        --text-secondary: #98989d;
+        --border: rgba(255,255,255,0.1);
+        --accent: #0a84ff;
+        --sidebar-item-active: rgba(255,255,255,0.1);
+        --sidebar-item-hover: rgba(255,255,255,0.05);
+      }
+    }
+
+    html, body {
+      height: 100%;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      -webkit-font-smoothing: antialiased;
+      user-select: none;
+    }
+
+    /* Barre titre macOS */
+    .titlebar {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      height: 30px;
+      -webkit-app-region: drag;
+      background: var(--sidebar-bg);
+      border-bottom: 1px solid var(--border);
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .titlebar span {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      -webkit-app-region: no-drag;
+    }
+
+    .content {
+      padding: 24px 28px;
+      padding-top: 54px;
+      overflow-y: auto;
+      height: 100%;
+    }
+
+    .section-title {
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 20px;
+    }
+
+    .card {
+      background: var(--content-bg);
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      overflow: hidden;
+      margin-bottom: 16px;
+    }
+
+    .card-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 13px 16px;
+      border-bottom: 1px solid var(--border);
+      gap: 16px;
+    }
+
+    .card-row:last-child { border-bottom: none; }
+
+    .card-row-label {
+      font-size: 13px;
+      color: var(--text);
+    }
+
+    .card-row-desc {
+      font-size: 11px;
+      color: var(--text-secondary);
+      margin-top: 2px;
+    }
+
+    .card-row input[type="text"],
+    .card-row input[type="url"] {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 5px 10px;
+      font-size: 13px;
+      color: var(--text);
+      width: 220px;
+      outline: none;
+      user-select: text;
+      -webkit-app-region: no-drag;
+    }
+
+    .card-row input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(0,113,227,0.2);
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      border: none;
+      outline: none;
+      -webkit-app-region: no-drag;
+      transition: opacity 0.15s;
+    }
+
+    .btn:hover { opacity: 0.85; }
+    .btn-primary { background: var(--accent); color: white; }
+    .btn-secondary { background: var(--sidebar-item-active); color: var(--text); }
+
+    .footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 16px;
+    }
+
+  </style>
+</head>
+<body>
+
+  <div class="titlebar">
+    <span>Paramètres</span>
+  </div>
+
+  <div class="content">
+    <div class="section-title">Connexion au serveur</div>
+    <div class="card">
+      <div class="card-row">
+        <div>
+          <div class="card-row-label">Adresse du serveur OpenRIG</div>
+          <div class="card-row-desc">URL du serveur web et de l'API (ex: https://monserveur.com)</div>
+        </div>
+        <input type="url" id="server-url" placeholder="https://localhost:5173" />
+      </div>
+      <div class="card-row">
+        <div>
+          <div class="card-row-label">Port de l'API</div>
+          <div class="card-row-desc">Port du serveur Express (défaut : 3001)</div>
+        </div>
+        <input type="text" id="api-port" placeholder="3001" style="width:80px" />
+      </div>
+    </div>
+    <div class="footer">
+      <button class="btn btn-secondary" onclick="resetConnection()">Réinitialiser</button>
+      <button class="btn btn-primary" onclick="saveConnection()">Enregistrer</button>
+    </div>
+  </div>
+
+  <script>
+    function saveConnection() {
+      const url  = document.getElementById('server-url').value.trim();
+      const port = document.getElementById('api-port').value.trim();
+      if (url)  localStorage.setItem('or_server_url', url);
+      if (port) localStorage.setItem('or_api_port', port);
+      if (window.electronApp) window.electronApp.saveServerUrl(url || null);
+      window.close();
+    }
+
+    function resetConnection() {
+      document.getElementById('server-url').value = '';
+      document.getElementById('api-port').value   = '';
+      localStorage.removeItem('or_server_url');
+      localStorage.removeItem('or_api_port');
+    }
+
+    const savedUrl  = localStorage.getItem('or_server_url');
+    const savedPort = localStorage.getItem('or_api_port');
+    if (savedUrl)  document.getElementById('server-url').value = savedUrl;
+    if (savedPort) document.getElementById('api-port').value   = savedPort;
+  </script>
+</body>
+</html>

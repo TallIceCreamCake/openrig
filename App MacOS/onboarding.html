@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <title>Bienvenue — OpenRIG</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      width: 100%; height: 100%;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", sans-serif;
+      -webkit-font-smoothing: antialiased;
+      overflow: hidden;
+    }
+
+    /* ── Fond bleu style login ── */
+    .bg {
+      position: fixed; inset: 0;
+      background: linear-gradient(145deg, #2d48d5 0%, #4a6af0 40%, #3550e0 70%, #2a3fc8 100%);
+    }
+
+    .blob {
+      position: absolute; border-radius: 50%;
+      filter: blur(70px); opacity: 0.4; pointer-events: none;
+    }
+    .blob-1 { width: 380px; height: 380px; background: radial-gradient(circle, #7b9fff, #4a6af0); top: -100px; left: -80px; animation: b1 10s ease-in-out infinite; }
+    .blob-2 { width: 300px; height: 300px; background: radial-gradient(circle, #a5beff, #5570ee); bottom: -60px; right: -60px; animation: b2 13s ease-in-out infinite; }
+    .blob-3 { width: 200px; height: 200px; background: radial-gradient(circle, #c0d0ff, #7090f8); top: 50%; left: 55%; animation: b3 9s ease-in-out infinite; }
+
+    @keyframes b1 { 0%,100%{transform:translate(0,0)} 50%{transform:translate(30px,25px)} }
+    @keyframes b2 { 0%,100%{transform:translate(0,0)} 45%{transform:translate(-35px,-20px)} }
+    @keyframes b3 { 0%,100%{transform:translate(0,0)} 55%{transform:translate(-20px,-25px)} }
+
+    /* ── Layout ── */
+    .wrapper {
+      position: relative; z-index: 10;
+      display: flex; align-items: center; justify-content: center;
+      width: 100%; height: 100%;
+      padding: 40px 24px;
+    }
+
+    /* ── Carte blanche ── */
+    .card {
+      width: 100%; max-width: 340px;
+      background: #fff;
+      border-radius: 16px;
+      padding: 36px 28px 32px;
+      box-shadow: 0 24px 64px rgba(0,0,0,0.22);
+    }
+
+    /* ── Steps ── */
+    .step { width: 100%; }
+    .step.hidden { display: none; }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(14px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fadeOut {
+      to { opacity: 0; transform: translateY(-10px); }
+    }
+    .step-enter { animation: fadeUp 0.38s cubic-bezier(.22,1,.36,1) both; }
+    .step-exit  { animation: fadeOut 0.22s ease forwards; }
+
+    /* ── Indicateur ── */
+    .dots { display: flex; gap: 5px; margin-bottom: 28px; }
+    .dot  { height: 4px; width: 18px; border-radius: 2px; background: #e5e7eb; transition: background 0.3s; }
+    .dot.active { background: #3a56e4; }
+
+    /* ── Textes ── */
+    .step-title {
+      font-size: 21px; font-weight: 700; color: #111827;
+      line-height: 1.25; margin-bottom: 8px; letter-spacing: -0.3px;
+    }
+    .step-sub {
+      font-size: 13px; color: #6b7280; line-height: 1.6; margin-bottom: 28px;
+    }
+
+    /* ── Champs ── */
+    .field { width: 100%; margin-bottom: 14px; }
+    .field label { display: block; font-size: 12px; font-weight: 500; color: #374151; margin-bottom: 5px; }
+    .field input {
+      width: 100%; background: #f9fafb; border: 1px solid #e5e7eb;
+      border-radius: 8px; padding: 10px 12px; font-size: 13px; color: #111827;
+      outline: none; transition: border-color 0.2s, box-shadow 0.2s;
+      -webkit-app-region: no-drag; user-select: text;
+    }
+    .field input::placeholder { color: #9ca3af; }
+    .field input:focus {
+      border-color: #3a56e4; box-shadow: 0 0 0 3px rgba(58,86,228,0.12); background: #fff;
+    }
+    .field-hint { font-size: 11px; color: #9ca3af; margin-top: 4px; line-height: 1.4; }
+
+    /* ── Boutons ── */
+    .btn {
+      width: 100%; padding: 11px; border: none; border-radius: 8px;
+      font-size: 14px; font-weight: 600; cursor: pointer; outline: none;
+      -webkit-app-region: no-drag; transition: opacity 0.15s, transform 0.1s;
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+    }
+    .btn:active { transform: scale(0.98); }
+    .btn-primary { background: #3a56e4; color: white; box-shadow: 0 4px 14px rgba(58,86,228,0.3); }
+    .btn-primary:hover { opacity: 0.9; }
+    .btn-primary:disabled { opacity: 0.65; cursor: not-allowed; transform: none; }
+
+    .btn-skip {
+      background: none; border: none; width: 100%; margin-top: 10px; padding: 7px;
+      font-size: 12px; color: #9ca3af; cursor: pointer; text-align: center;
+      -webkit-app-region: no-drag; transition: color 0.15s;
+    }
+    .btn-skip:hover { color: #6b7280; }
+
+    /* ── Erreur ── */
+    .error { font-size: 12px; color: #ef4444; margin-top: 8px; display: none; }
+  </style>
+</head>
+<body>
+
+  <div class="bg">
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+    <div class="blob blob-3"></div>
+  </div>
+
+  <div class="wrapper">
+    <div class="card">
+
+      <!-- Étape 1 -->
+      <div class="step step-enter" id="step1">
+        <div class="dots">
+          <div class="dot active"></div>
+          <div class="dot"></div>
+        </div>
+        <h1 class="step-title">Bienvenue sur<br>OpenRIG Desktop</h1>
+        <p class="step-sub">L'application bureau pour gérer vos locations de matériel, connectée directement à votre serveur OpenRIG.</p>
+        <button class="btn btn-primary" onclick="goStep2()">
+          Commencer
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </button>
+      </div>
+
+      <!-- Étape 2 -->
+      <div class="step hidden" id="step2">
+        <div class="dots">
+          <div class="dot"></div>
+          <div class="dot active"></div>
+        </div>
+        <h1 class="step-title">Connexion au serveur</h1>
+        <p class="step-sub">Indiquez l'adresse de votre instance OpenRIG. Modifiable à tout moment dans les paramètres.</p>
+
+        <div class="field">
+          <label>Adresse du serveur</label>
+          <input type="url" id="server-url" placeholder="http://192.168.1.10:5173" autocomplete="off" spellcheck="false" />
+        </div>
+
+        <button class="btn btn-primary" id="btn-launch" onclick="launch()">Lancer OpenRIG</button>
+        <div class="error" id="error-msg">Adresse invalide. Vérifiez le format (http://...)</div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    function goStep2() {
+      const s1 = document.getElementById('step1');
+      s1.classList.add('step-exit');
+      setTimeout(() => {
+        s1.classList.add('hidden'); s1.classList.remove('step-exit');
+        const s2 = document.getElementById('step2');
+        s2.classList.remove('hidden'); s2.classList.add('step-enter');
+        document.getElementById('server-url').focus();
+      }, 220);
+    }
+
+    function launch() {
+      const input = document.getElementById('server-url');
+      const errEl = document.getElementById('error-msg');
+      const btn   = document.getElementById('btn-launch');
+      const url   = input.value.trim();
+
+      errEl.style.display = 'none';
+
+      if (!url) {
+        errEl.textContent = 'Veuillez saisir l\'adresse du serveur.';
+        errEl.style.display = 'block'; return;
+      }
+
+      try { new URL(url); } catch {
+        errEl.textContent = 'Adresse invalide. Vérifiez le format (http://...).';
+        errEl.style.display = 'block'; return;
+      }
+
+      if (!window.electronApp?.completeOnboarding) {
+        errEl.textContent = 'Erreur : communication avec l\'app impossible.';
+        errEl.style.display = 'block'; return;
+      }
+
+      btn.textContent = 'Démarrage…'; btn.disabled = true;
+      window.electronApp.completeOnboarding(url);
+
+      setTimeout(() => {
+        if (!btn.disabled) return;
+        btn.textContent = 'Lancer OpenRIG'; btn.disabled = false;
+        errEl.textContent = 'Le serveur ne répond pas. Vérifiez l\'adresse.';
+        errEl.style.display = 'block';
+      }, 6000);
+    }
+
+    document.getElementById('server-url')?.addEventListener('keydown', e => {
+      if (e.key === 'Enter') launch();
+    });
+  </script>
+</body>
+</html>
