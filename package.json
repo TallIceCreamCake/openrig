@@ -8,7 +8,10 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "server": "node server/index.js"
+    "server": "node server/index.js",
+    "server:no-supabase": "OPENRIG_SUPABASE_BOOT_MODE=skip node server/index.js",
+    "start": "concurrently -k -n api,front -c blue,green \"npm:server:no-supabase\" \"npm:dev\"",
+    "start:full": "node scripts/start-full.mjs"
   },
   "dependencies": {
     "@react-pdf/renderer": "^4.3.0",
@@ -50,6 +53,7 @@
     "@vitejs/plugin-basic-ssl": "^1.0.2",
     "@vitejs/plugin-react": "^4.3.1",
     "autoprefixer": "^10.4.18",
+    "concurrently": "^10.0.3",
     "eslint": "^9.9.1",
     "eslint-plugin-react-hooks": "^5.1.0-rc.0",
     "eslint-plugin-react-refresh": "^0.4.11",

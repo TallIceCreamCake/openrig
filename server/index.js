@@ -472,6 +472,7 @@ const readSupabaseVerificationFlag = () => {
 const writeSupabaseVerificationFlag = (verified) => {
   ensureDataDir();
   try {
+    if (readSupabaseVerificationFlag().verified === Boolean(verified)) return;
     fs.writeFileSync(
       SUPABASE_VERIFICATION_FILE,
       JSON.stringify({ verified: Boolean(verified), updatedAt: new Date().toISOString() }, null, 2),
@@ -525,6 +526,8 @@ const readSupabaseConfigState = () => {
 const writeSupabaseConfigState = (supabaseIsConfig) => {
   ensureDataDir();
   try {
+    const current = readSupabaseConfigState();
+    if (current.source === 'file' && current.supabaseIsConfig === Boolean(supabaseIsConfig)) return;
     fs.writeFileSync(
       SUPABASE_CONFIG_STATE_FILE,
       JSON.stringify(
@@ -758,6 +761,77 @@ const refreshSupabaseHealth = async () => {
   }
 };
 
+// Background/health-poll variant: refreshes the in-memory status without writing
+// any persisted flags on failure. A transient failure observed by a poll (e.g.
+// Supabase containers still starting) must never set forceReset metadata, which
+// would trigger a destructive "db reset" on the next full boot.
+const refreshSupabaseHealthLight = async () => {
+  if (!supabase) {
+    setSupabaseHealth({ status: 'unreachable', issues: [], message: 'Supabase non configuré' });
+    return null;
+  }
+  try {
+    const evaluation = await evaluateSupabaseStructure(supabase);
+    if (!evaluation) return null;
+    if (evaluation.ok) {
+      applyStructureEvaluation(evaluation);
+      return evaluation;
+    }
+    if (evaluation.reason === 'unauthorized') {
+      setSupabaseHealth({
+        status: 'unauthorized',
+        issues: [],
+        message: evaluation.error?.message || 'Accès Supabase refusé. Vérifiez la clé service_role.',
+      });
+    } else if (evaluation.reason === 'unreachable') {
+      setSupabaseHealth({
+        status: 'unreachable',
+        issues: [],
+        message: evaluation.error?.message || 'Supabase est inaccessible.',
+      });
+    } else {
+      const issues = Array.isArray(evaluation.checks)
+        ? evaluation.checks.filter((check) => check.status && check.status !== 'ok')
+        : [];
+      setSupabaseHealth({
+        status: 'invalid',
+        issues,
+        message: issues.length > 0
+          ? 'Certaines tables ou colonnes requises sont manquantes.'
+          : 'Structure Supabase invalide.',
+      });
+    }
+    return evaluation;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    setSupabaseHealth({ status: 'failed', issues: [], message });
+    return null;
+  }
+};
+
+const HEALTH_REFRESH_MIN_INTERVAL_MS = 15 * 1000;
+const HEALTH_REFRESH_WAIT_BUDGET_MS = 8 * 1000;
+let healthRefreshInFlight = null;
+
+// Re-checks Supabase health when the cached status is stale, so the status
+// endpoints reflect reality in every launch mode (with or without the
+// Supabase auto-bootstrap). Waits at most HEALTH_REFRESH_WAIT_BUDGET_MS so a
+// slow/unreachable Supabase never blocks the HTTP response: the refresh keeps
+// running in the background and the next poll picks up the result.
+const refreshSupabaseHealthIfStale = async ({ maxAgeMs = HEALTH_REFRESH_MIN_INTERVAL_MS } = {}) => {
+  if (supabaseBootstrapState.status === 'running') return;
+  const updatedAtMs = latestSupabaseHealth.updatedAt ? Date.parse(latestSupabaseHealth.updatedAt) : 0;
+  if (Number.isFinite(updatedAtMs) && updatedAtMs > 0 && Date.now() - updatedAtMs < maxAgeMs) return;
+  if (!healthRefreshInFlight) {
+    healthRefreshInFlight = refreshSupabaseHealthLight()
+      .catch(() => null)
+      .finally(() => {
+        healthRefreshInFlight = null;
+      });
+  }
+  await Promise.race([healthRefreshInFlight, sleep(HEALTH_REFRESH_WAIT_BUDGET_MS)]);
+};
+
 const waitForSupabaseStructure = async ({ attempts = 10, delay = 2000 } = {}) => {
   let evaluation = null;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
@@ -926,7 +1000,12 @@ const ensureSupabaseOnBoot = () => {
       };
     }
     console.info('[supabase/bootstrap] boot mode=skip (set OPENRIG_SUPABASE_BOOT_MODE=start to restore auto-start)');
-    return Promise.resolve();
+    // Still evaluate the real health once so stale flags left by a previous
+    // full launch (credentials file, .env) don't make the app believe the
+    // database is up — or down — when it isn't.
+    return refreshSupabaseHealthLight().catch((err) => {
+      console.warn('[supabase/health] initial check failed', err);
+    });
   }
 
   if (!supabaseBootstrapPromise) {
@@ -3484,6 +3563,7 @@ app.post('/api/system/company-setup/logo-upload', async (req, res) => {
 });
 
 app.get('/api/system/setup-status', async (req, res) => {
+  await refreshSupabaseHealthIfStale();
   const supabaseStatus = latestSupabaseHealth.status || 'unknown';
   const supabaseReady = isSupabaseReady() && supabaseStatus === 'ready';
   const verification = readSupabaseVerificationFlag();
@@ -3544,7 +3624,8 @@ app.get('/api/system/setup-status', async (req, res) => {
   return res.json(payload);
 });
 
-app.get('/api/system/database-health', (req, res) => {
+app.get('/api/system/database-health', async (req, res) => {
+  await refreshSupabaseHealthIfStale();
   const configState = readSupabaseConfigState();
   res.json({
     status: latestSupabaseHealth.status,
