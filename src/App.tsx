@@ -60,6 +60,44 @@ import DepotLayout from './pages/depot/DepotLayout';
 import DepotHome from './pages/depot/DepotHome';
 import { getPreferredInterfaceMode, resolvePostLoginPath } from './utils/interfaceMode';
 
+/* Redirects to the install wizard when the instance is not set up yet:
+ * Supabase never configured/verified, or no initial admin account. A reachable
+ * but temporarily down database on an installed instance does NOT trigger it. */
+const SetupGate: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const location = useLocation();
+  const [needsSetup, setNeedsSetup] = React.useState<boolean | null>(null);
+  const isSetupPath = location.pathname.startsWith('/setup');
+
+  // Re-check when entering/leaving the wizard, so finishing the install
+  // does not bounce the user back to /setup.
+  React.useEffect(() => {
+    let cancelled = false;
+    setNeedsSetup(null);
+    fetch('/api/system/setup-status', { headers: { Accept: 'application/json' }, cache: 'no-store' })
+      .then((res) => res.json())
+      .then((data) => {
+        if (cancelled) return;
+        const notInstalled = !data?.supabaseIsConfig
+          || !data?.verified
+          || (Boolean(data?.supabaseReady) && !data?.adminExists);
+        setNeedsSetup(Boolean(notInstalled));
+      })
+      .catch(() => {
+        if (!cancelled) setNeedsSetup(false);
+      });
+    return () => { cancelled = true; };
+  }, [isSetupPath]);
+
+  const isExempt = isSetupPath || location.pathname.startsWith('/share/');
+  if (needsSetup === null && !isExempt) {
+    return <div className="h-screen w-screen flex items-center justify-center text-gray-500">…</div>;
+  }
+  if (needsSetup && !isExempt) {
+    return <Navigate to="/setup" replace />;
+  }
+  return <>{children}</>;
+};
+
 const RequireAuth: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, loading } = useAuth();
   const location = useLocation();
@@ -97,6 +135,7 @@ function App() {
         <TranslationProvider>
           <AuthProvider>
             <Toaster position="top-right" />
+            <SetupGate>
             <Routes>
               <Route path="/login" element={<LoginPage />} />
               <Route path="/share/dossier/:token" element={<DossierShare />} />
@@ -182,6 +221,7 @@ function App() {
                 }
               />
             </Routes>
+            </SetupGate>
           </AuthProvider>
         </TranslationProvider>
         <DatabaseOfflineOverlay />

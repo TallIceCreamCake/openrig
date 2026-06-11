@@ -39,11 +39,8 @@ const SearchOverlay: React.FC<SearchOverlayProps> = ({
       }
     `}</style>
 
-    {/* Panel — uses topbar background so it blends in */}
-    <div
-      className="rounded-xl overflow-hidden shadow-2xl ring-1 ring-black/[0.07] dark:ring-white/[0.07]"
-      style={{ background: 'var(--topbar-bg, white)' }}
-    >
+    {/* Panel — glass surface matching the topbar pill */}
+    <div className="topbar-glass-panel rounded-2xl overflow-hidden">
       {!hideInput && (
         <div className="flex items-center gap-2 px-3 py-2.5 border-b border-black/[0.05] dark:border-white/[0.05]">
           <Search className="h-4 w-4 text-gray-400 flex-shrink-0" />
@@ -271,7 +268,7 @@ const TopBar = () => {
                           onChange={handleSearchOverlay}
                           onClear={() => { setSearchQuery(''); setResults([]); }}
                           onClose={closeTabSearch}
-                          className="absolute top-full left-0 w-full min-w-[400px]"
+                          className="absolute top-full mt-2 left-0 w-full min-w-[400px]"
                           hideInput
                         />
                       )}
@@ -308,7 +305,7 @@ const TopBar = () => {
                     onChange={handleSearchOverlay}
                     onClear={() => { setSearchQuery(''); setResults([]); }}
                     onClose={() => { setShowSearchOverlay(false); setSearchQuery(''); setResults([]); }}
-                    className="absolute top-full left-0 w-full min-w-[400px]"
+                    className="absolute top-full mt-2 left-0 w-full min-w-[400px]"
                     hideInput
                   />
                 )}

@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { X, Bell, Check, Trash2, Settings } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -52,11 +53,14 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
 
   const groupedNotifications = groupNotificationsByDate(notifications);
 
-  return (
+  // Rendered in a portal: the glass topbar (backdrop-filter) would otherwise
+  // become the containing block of these fixed elements and trap their z-index
+  // in its stacking context.
+  return createPortal(
     <>
       {/* Overlay */}
       <div
-        className="fixed inset-0 bg-black z-40"
+        className="fixed inset-0 bg-black z-[12000]"
         style={{
           opacity: isOpen ? 0.2 : 0,
           transition: 'opacity 250ms ease',
@@ -67,7 +71,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
 
       {/* Panel */}
       <div
-        className="fixed top-0 right-0 z-50 flex h-full w-[380px] flex-col bg-white dark:bg-gray-900"
+        className="fixed top-0 right-0 z-[12010] flex h-full w-[380px] flex-col bg-white dark:bg-gray-900 rounded-l-2xl"
         style={{
           transform: isOpen ? 'translateX(0)' : 'translateX(100%)',
           opacity: isOpen ? 1 : 0,
@@ -168,7 +172,8 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({
           </button>
         </div>
       </div>
-    </>
+    </>,
+    document.body,
   );
 };
 

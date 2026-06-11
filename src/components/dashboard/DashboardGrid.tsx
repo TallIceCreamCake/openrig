@@ -771,24 +771,25 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
           return (
             <div
               key={widget.id}
-              className={`bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden flex flex-col ${
-                isEditing ? 'cursor-move hover:shadow-md' : ''
+              className={`dashboard-card overflow-hidden flex flex-col ${
+                isEditing ? 'dashboard-card-editing cursor-move' : ''
               }`}
             >
               {/* Widget Header */}
-              <div className={`px-4 py-3 border-b border-gray-100 bg-gray-50 ${
-                isEditing ? 'flex justify-between items-center' : ''
-              }`}>
-                <h3 className="text-sm font-medium text-gray-900">{widget.title}</h3>
+              <div className="px-4 py-3 border-b border-gray-100 flex justify-between items-center gap-2">
+                <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-800 min-w-0">
+                  <span className="dashboard-card-title-tick h-3.5 w-1 rounded-full flex-shrink-0" aria-hidden="true" />
+                  <span className="truncate">{widget.title}</span>
+                </h3>
                 {isEditing && (
-                  <div className="relative flex items-center gap-1">
+                  <div className="relative flex items-center gap-1 flex-shrink-0">
                     {canConfigure && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           setOptionsWidgetId(widget.id);
                         }}
-                        className="dashboard-widget-action p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                        className="dashboard-widget-action p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                         title="Configurer le widget"
                         aria-label="Configurer le widget"
                       >
@@ -800,7 +801,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
                         e.stopPropagation();
                         onRemoveWidget(widget.id);
                       }}
-                      className="dashboard-widget-action p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
+                      className="dashboard-widget-action p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                       title={t('dashboard.grid.removeWidget')}
                     >
                       <X className="h-4 w-4" />

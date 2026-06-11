@@ -256,8 +256,20 @@ const startApp = async () => {
   child.on('exit', (code) => process.exit(code ?? 0));
 };
 
+const MIN_NODE_MAJOR = 20;
+
+const ensureNodeVersion = () => {
+  const major = Number.parseInt(String(process.versions.node).split('.')[0], 10) || 0;
+  if (major < MIN_NODE_MAJOR) {
+    fail(`Node.js ${process.versions.node} détecté : OpenRig requiert Node.js ${MIN_NODE_MAJOR} ou plus.\n`
+      + '  Sur Debian/Ubuntu : curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && apt-get install -y nodejs\n'
+      + '  Sur macOS : brew install node@22 (ou https://nodejs.org)');
+  }
+};
+
 const main = async () => {
   log('OpenRig — démarrage complet (Docker + Supabase + API + Front)');
+  ensureNodeVersion();
   await ensureDocker();
   await ensureNodeModules();
   await startSupabase();

@@ -426,11 +426,45 @@
 }
 
 .topbar-tab-active {
-  background: linear-gradient(
-    to top,
-    color-mix(in srgb, var(--accent, #2563eb) 10%, transparent),
-    transparent 70%
-  );
+  background-color: color-mix(in srgb, var(--accent, #2563eb) 8%, transparent);
+}
+
+/* ===== Dashboard widget cards ===== */
+.dashboard-card {
+  background: #ffffff;
+  border: 1px solid rgba(17, 24, 39, 0.07);
+  border-radius: 1rem;
+  box-shadow: 0 2px 12px -6px rgba(0, 0, 0, 0.08);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.dashboard-card:hover {
+  box-shadow: 0 6px 20px -8px rgba(0, 0, 0, 0.14);
+}
+
+.dashboard-card-editing {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--accent, #2563eb) 45%, transparent);
+}
+
+.dashboard-card-title-tick {
+  background-color: var(--accent, #2563eb);
+}
+
+.dashboard-grid .react-grid-placeholder {
+  background: var(--accent, #2563eb) !important;
+  opacity: 0.1 !important;
+  border-radius: 1rem;
+}
+
+/* Floating panel for popovers attached to the topbar (search results).
+   Solid background on purpose: results must stay perfectly readable. */
+.topbar-glass-panel {
+  background-color: var(--topbar-bg);
+  border: 1px solid var(--topbar-border);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, #ffffff 30%, transparent),
+    0 16px 40px -12px rgba(0, 0, 0, 0.18);
 }
 
 .topbar-kbd {

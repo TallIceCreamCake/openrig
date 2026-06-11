@@ -24,3 +24,8 @@ dist-ssr
 *.sw?
 .env
 server/data/supabase-credentials.json
+# OpenRig runtime state (per-install, never committed)
+server/data/supabase-config-state.json
+server/data/supabase-verification.json
+server/data/supabase-bootstrap.json
+server/data/supabase-credentials.json
