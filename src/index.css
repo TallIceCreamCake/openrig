@@ -262,10 +262,22 @@
   --topbar-input-placeholder: #6b7280;
 }
 
+/* Liquid glass surface: translucent themed background + blur, with a
+   specular sheen painted under the content. Solid fallbacks first so older
+   browsers without color-mix/backdrop-filter keep a usable sidebar. */
 .sidebar-shell {
   background-color: var(--sidebar-bg) !important;
+  background-color: color-mix(in srgb, var(--sidebar-bg) 72%, transparent) !important;
+  background-image: linear-gradient(
+    165deg,
+    color-mix(in srgb, #ffffff 14%, transparent),
+    transparent 45%
+  );
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  backdrop-filter: blur(24px) saturate(160%);
   color: var(--sidebar-text);
   border-color: var(--sidebar-border) !important;
+  border-color: color-mix(in srgb, var(--sidebar-border) 65%, transparent) !important;
 }
 
 .sidebar-title {
@@ -297,6 +309,7 @@
 
 .sidebar-link:hover {
   background-color: var(--sidebar-hover-bg);
+  background-color: color-mix(in srgb, var(--sidebar-hover-bg) 70%, transparent);
   color: var(--sidebar-text);
 }
 
@@ -352,7 +365,10 @@
 
 @media (min-width: 768px) {
   .sidebar-shell {
-    box-shadow: 0 10px 32px -8px rgba(0, 0, 0, 0.12);
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, #ffffff 35%, transparent),
+      inset 0 0 0 1px color-mix(in srgb, #ffffff 6%, transparent),
+      0 10px 32px -8px rgba(0, 0, 0, 0.14);
   }
 }
 
@@ -384,10 +400,48 @@
   background-color: var(--sidebar-muted-text);
 }
 
+/* Liquid glass topbar — same surface treatment as the sidebar, with solid
+   fallbacks for browsers without color-mix/backdrop-filter. */
 .app-topbar {
   background-color: var(--topbar-bg) !important;
-  border-bottom: 1px solid var(--topbar-border);
+  background-color: color-mix(in srgb, var(--topbar-bg) 72%, transparent) !important;
+  background-image: linear-gradient(
+    165deg,
+    color-mix(in srgb, #ffffff 12%, transparent),
+    transparent 55%
+  );
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  backdrop-filter: blur(24px) saturate(160%);
   color: var(--topbar-text);
+  border-color: var(--topbar-border) !important;
+  border-color: color-mix(in srgb, var(--topbar-border) 65%, transparent) !important;
+}
+
+@media (min-width: 768px) {
+  .app-topbar {
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, #ffffff 35%, transparent),
+      0 8px 24px -12px rgba(0, 0, 0, 0.12);
+  }
+}
+
+.topbar-tab-active {
+  background: linear-gradient(
+    to top,
+    color-mix(in srgb, var(--accent, #2563eb) 10%, transparent),
+    transparent 70%
+  );
+}
+
+.topbar-kbd {
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 3px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--topbar-input-border);
+  color: var(--topbar-input-placeholder);
+  background-color: color-mix(in srgb, var(--topbar-input-bg) 50%, transparent);
 }
 
 .topbar-leading-icon {
@@ -396,8 +450,11 @@
 
 :root input.topbar-search-input {
   background-color: var(--topbar-input-bg) !important;
+  background-color: color-mix(in srgb, var(--topbar-input-bg) 60%, transparent) !important;
   border-color: var(--topbar-input-border) !important;
+  border-color: color-mix(in srgb, var(--topbar-input-border) 70%, transparent) !important;
   color: var(--topbar-input-text) !important;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
 }
 
 :root input.topbar-search-input::placeholder {
@@ -411,6 +468,9 @@
 :root input.topbar-search-input:focus {
   border-color: var(--accent, #2563eb) !important;
   color: var(--topbar-input-text) !important;
+  background-color: var(--topbar-input-bg) !important;
+  background-color: color-mix(in srgb, var(--topbar-input-bg) 85%, transparent) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent, #2563eb) 18%, transparent);
 }
 
 .topbar-icon-btn {
@@ -419,6 +479,7 @@
 
 .topbar-icon-btn:hover {
   background-color: var(--topbar-hover-bg);
+  background-color: color-mix(in srgb, var(--topbar-hover-bg) 70%, transparent);
 }
 
 .topbar-icon-btn:active {

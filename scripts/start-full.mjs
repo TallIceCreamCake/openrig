@@ -64,6 +64,25 @@ const commandExists = (command) => {
   return probe.code === 0;
 };
 
+const IS_ROOT = typeof process.getuid === 'function' && process.getuid() === 0;
+
+// Prefixes a command with sudo only when needed: as root (or without sudo
+// installed, as on fresh VMs) commands run directly.
+const asAdmin = (command, args) => {
+  if (IS_ROOT || !commandExists('sudo')) return [command, args];
+  return ['sudo', [command, ...args]];
+};
+
+const runAdmin = (command, args, options) => {
+  const [cmd, finalArgs] = asAdmin(command, args);
+  return run(cmd, finalArgs, options);
+};
+
+const runAdminQuiet = (command, args, options) => {
+  const [cmd, finalArgs] = asAdmin(command, args);
+  return runQuiet(cmd, finalArgs, options);
+};
+
 const dockerDaemonReady = () => runQuiet('docker', ['info']).code === 0;
 
 const installDocker = async () => {
@@ -81,13 +100,15 @@ const installDocker = async () => {
   }
 
   if (IS_LINUX) {
-    log('Installation via le script officiel get.docker.com (sudo requis)…');
+    log(`Installation via le script officiel get.docker.com${IS_ROOT ? '' : ' (sudo requis)'}…`);
     const dl = await run('sh', ['-c', 'curl -fsSL https://get.docker.com -o /tmp/openrig-get-docker.sh']);
     if (dl !== 0) fail('Impossible de télécharger le script d\'installation Docker.');
-    const code = await run('sudo', ['sh', '/tmp/openrig-get-docker.sh']);
+    const code = await runAdmin('sh', ['/tmp/openrig-get-docker.sh']);
     if (code !== 0) fail('Échec de l\'installation de Docker.');
-    await run('sudo', ['usermod', '-aG', 'docker', process.env.USER || 'root']);
-    warn('Votre utilisateur a été ajouté au groupe "docker". Si les commandes docker échouent, déconnectez/reconnectez votre session puis relancez cette commande.');
+    if (!IS_ROOT) {
+      await runAdmin('usermod', ['-aG', 'docker', process.env.USER || 'root']);
+      warn('Votre utilisateur a été ajouté au groupe "docker". Si les commandes docker échouent, déconnectez/reconnectez votre session puis relancez cette commande.');
+    }
     return;
   }
 
@@ -119,11 +140,11 @@ const startDockerDaemon = async () => {
     if (commandExists('systemctl')) {
       const active = runQuiet('systemctl', ['is-active', 'docker']);
       if (active.code !== 0) {
-        log('Démarrage du service docker (sudo requis)…');
-        await run('sudo', ['systemctl', 'start', 'docker']);
+        log(`Démarrage du service docker${IS_ROOT ? '' : ' (sudo requis)'}…`);
+        await runAdmin('systemctl', ['start', 'docker']);
       }
     } else {
-      await run('sudo', ['service', 'docker', 'start']);
+      await runAdmin('service', ['docker', 'start']);
     }
     return;
   }
@@ -173,7 +194,7 @@ const ensureDocker = async () => {
   await startDockerDaemon();
   const ready = await waitForDocker();
   if (!ready) {
-    if (IS_LINUX && runQuiet('sudo', ['docker', 'info']).code === 0) {
+    if (IS_LINUX && !IS_ROOT && runAdminQuiet('docker', ['info']).code === 0) {
       fail('Le démon Docker tourne mais votre utilisateur n\'a pas encore accès au groupe "docker".\n'
         + '  Déconnectez/reconnectez votre session (ou exécutez "newgrp docker") puis relancez cette commande.');
     }

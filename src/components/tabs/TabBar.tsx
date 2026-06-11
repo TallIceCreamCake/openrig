@@ -101,7 +101,7 @@ const TabBar: React.FC = () => {
               className={[
                 'group relative flex items-center gap-1.5 px-4 h-full select-none transition-colors duration-150 flex-shrink-0 text-sm',
                 !isLast ? 'after:absolute after:right-0 after:inset-y-3 after:w-px after:bg-gray-200 dark:after:bg-gray-700 after:pointer-events-none' : '',
-                active ? 'font-medium' : 'font-normal hover:bg-black/[0.03] dark:hover:bg-white/[0.03]',
+                active ? 'topbar-tab-active font-medium' : 'font-normal hover:bg-black/[0.03] dark:hover:bg-white/[0.03]',
               ].join(' ')}
               style={active
                 ? { color: 'var(--topbar-tab-active-text, #2563eb)' }

@@ -208,7 +208,7 @@ const Sidebar = () => {
         `}
       >
         {/* Header */}
-        <div className={`flex items-center flex-shrink-0 gap-3 pt-5 pb-4 ${showLabels ? 'px-4' : 'justify-center px-0'}`}>
+        <div className={`flex items-center flex-shrink-0 pt-5 pb-4 ${showLabels ? 'gap-3 px-4' : 'justify-center gap-0 px-0'}`}>
           <div className="sidebar-logo-badge h-10 w-10 flex-shrink-0 rounded-xl grid place-items-center">
             <span className="text-white font-extrabold text-sm leading-none tracking-tight">OR</span>
           </div>

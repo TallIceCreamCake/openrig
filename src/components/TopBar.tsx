@@ -161,6 +161,24 @@ const TopBar = () => {
     setSearchQuery(e.target.value);
   };
 
+  // Cmd+K / Ctrl+K opens the global search
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault();
+        setShowSearchOverlay(true);
+        setTimeout(() => searchOverlayInputRef.current?.focus(), 60);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  const isMacPlatform = useMemo(
+    () => typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || ''),
+    [],
+  );
+
   // Apply accent early from cookie (to avoid flash)
   useEffect(() => {
     try {
@@ -194,7 +212,7 @@ const TopBar = () => {
   }, [searchQuery]);
 
   return (
-    <header className="app-topbar shadow relative z-[45]">
+    <header className="app-topbar relative z-[45] border-b md:border md:mx-3 md:mt-3 md:rounded-2xl">
       <div className="px-4 sm:px-6 lg:px-8">
         <div className="flex items-center h-16 gap-3">
 
@@ -239,7 +257,7 @@ const TopBar = () => {
                       </div>
                       <input
                         ref={searchOverlayInputRef}
-                        className="topbar-search-input block w-full pl-10 pr-3 py-2 border rounded-md leading-5 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                        className="topbar-search-input block w-full pl-10 pr-3 py-2 border rounded-full leading-5 focus:outline-none sm:text-sm"
                         placeholder="Rechercher matériel, presta, client..."
                         type="search"
                         value={searchQuery}
@@ -272,13 +290,16 @@ const TopBar = () => {
                 <input
                   id="search"
                   ref={searchOverlayInputRef}
-                  className="topbar-search-input block w-full pl-10 pr-3 py-2 border rounded-md leading-5 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                  className="topbar-search-input block w-full pl-10 pr-14 py-2 border rounded-full leading-5 focus:outline-none sm:text-sm"
                   placeholder="Rechercher matériel, presta, client..."
                   type="search"
                   value={searchQuery}
                   onChange={handleSearchOverlay}
                   onFocus={() => setShowSearchOverlay(true)}
                 />
+                <div className="absolute inset-y-0 right-3 hidden lg:flex items-center pointer-events-none">
+                  <kbd className="topbar-kbd">{isMacPlatform ? '⌘K' : 'Ctrl K'}</kbd>
+                </div>
                 {showSearchOverlay && searchQuery.trim().length >= 3 && (
                   <SearchOverlay
                     searchQuery={searchQuery}
@@ -311,7 +332,7 @@ const TopBar = () => {
                 className="topbar-icon-btn relative p-2 rounded-full focus:outline-none transition-colors"
                 title="Aide"
               >
-                <HelpCircle className="h-6 w-6" />
+                <HelpCircle className="h-5 w-5" />
               </button>
               <HelpPanel isOpen={showHelp} onClose={() => setShowHelp(false)} />
             </div>
@@ -321,9 +342,9 @@ const TopBar = () => {
               onClick={() => setIsOpen(!isOpen)}
               className="topbar-icon-btn relative p-2 rounded-full focus:outline-none transition-colors"
             >
-              <Bell className="h-6 w-6" />
+              <Bell className="h-5 w-5" />
               {unreadCount > 0 && (
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-medium">
+                <span className="absolute top-0.5 right-0.5 bg-red-500 text-white text-[10px] rounded-full h-4 min-w-[1rem] px-1 flex items-center justify-center font-semibold shadow-sm">
                   {unreadCount > 99 ? '99+' : unreadCount}
                 </span>
               )}
@@ -336,7 +357,7 @@ const TopBar = () => {
                 className="topbar-icon-btn flex items-center gap-2 px-2 py-1.5 rounded-full focus:outline-none transition-colors"
               >
                 <img
-                  className="h-8 w-8 rounded-full object-cover flex-shrink-0"
+                  className="h-8 w-8 rounded-full object-cover flex-shrink-0 ring-1 ring-black/10"
                   src={profile.avatar}
                   alt="Profile"
                 />
