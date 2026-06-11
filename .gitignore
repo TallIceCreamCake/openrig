@@ -24,6 +24,7 @@ dist-ssr
 *.sw?
 .env
 server/data/supabase-credentials.json
+AppMacOS
 # OpenRig runtime state (per-install, never committed)
 server/data/supabase-config-state.json
 server/data/supabase-verification.json
