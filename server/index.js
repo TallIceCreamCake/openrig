@@ -3641,6 +3641,224 @@ app.get('/api/system/database-health', async (req, res) => {
   });
 });
 
+/* ===== Application update system =====
+ * Compares the local checkout with the GitHub remote (origin) and applies
+ * updates with git pull. The app version lives in package.json (YYYY.M.N).
+ */
+const UPDATE_CHECK_TTL_MS = 5 * 60 * 1000;
+let updateStatusCache = null;
+let updateApplyLock = false;
+
+const runCommand = (command, args, { cwd = PROJECT_ROOT, timeout = 60 * 1000 } = {}) => new Promise((resolve) => {
+  const child = spawn(command, args, {
+    cwd,
+    env: { ...process.env },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let stdout = '';
+  let stderr = '';
+  const timer = setTimeout(() => {
+    try { child.kill('SIGTERM'); } catch { /* already dead */ }
+  }, timeout);
+  child.stdout?.on('data', (chunk) => { stdout += chunk.toString(); });
+  child.stderr?.on('data', (chunk) => { stderr += chunk.toString(); });
+  child.on('error', (err) => {
+    clearTimeout(timer);
+    resolve({ code: 1, stdout, stderr: stderr || String(err?.message || err) });
+  });
+  child.on('close', (code) => {
+    clearTimeout(timer);
+    resolve({ code: code ?? 1, stdout, stderr });
+  });
+});
+
+const readLocalAppVersion = () => {
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(PROJECT_ROOT, 'package.json'), 'utf-8'));
+    return typeof pkg.version === 'string' ? pkg.version : null;
+  } catch (err) {
+    console.warn('[update] unable to read local version', err);
+    return null;
+  }
+};
+
+// Numeric segment-by-segment comparison so 2026.6.10 > 2026.6.9.
+const compareAppVersions = (a, b) => {
+  const parse = (value) => String(value || '').split('.').map((part) => Number.parseInt(part, 10) || 0);
+  const pa = parse(a);
+  const pb = parse(b);
+  const len = Math.max(pa.length, pb.length);
+  for (let i = 0; i < len; i += 1) {
+    const diff = (pa[i] || 0) - (pb[i] || 0);
+    if (diff !== 0) return diff > 0 ? 1 : -1;
+  }
+  return 0;
+};
+
+const detectGitBranch = async () => {
+  const res = await runCommand('git', ['rev-parse', '--abbrev-ref', 'HEAD']);
+  const branch = res.code === 0 ? res.stdout.trim() : '';
+  return branch && branch !== 'HEAD' ? branch : 'main';
+};
+
+const collectUpdateStatus = async ({ refresh = false } = {}) => {
+  const now = Date.now();
+  if (!refresh && updateStatusCache && now - updateStatusCache.checkedAt < UPDATE_CHECK_TTL_MS) {
+    return updateStatusCache;
+  }
+  const branch = await detectGitBranch();
+  const fetchRes = await runCommand('git', ['fetch', 'origin', branch], { timeout: 120 * 1000 });
+  if (fetchRes.code !== 0) {
+    updateStatusCache = {
+      checkedAt: now,
+      branch,
+      remoteVersion: null,
+      commitsBehind: null,
+      error: 'fetch_failed',
+      errorDetail: (fetchRes.stderr || fetchRes.stdout).trim().slice(-500) || null,
+    };
+    return updateStatusCache;
+  }
+  let remoteVersion = null;
+  const showRes = await runCommand('git', ['show', `origin/${branch}:package.json`]);
+  if (showRes.code === 0) {
+    try {
+      const parsed = JSON.parse(showRes.stdout);
+      remoteVersion = typeof parsed.version === 'string' ? parsed.version : null;
+    } catch (err) {
+      console.warn('[update] unable to parse remote package.json', err);
+    }
+  }
+  const behindRes = await runCommand('git', ['rev-list', '--count', `HEAD..origin/${branch}`]);
+  const commitsBehind = behindRes.code === 0 ? (Number.parseInt(behindRes.stdout.trim(), 10) || 0) : null;
+  updateStatusCache = { checkedAt: now, branch, remoteVersion, commitsBehind, error: null, errorDetail: null };
+  return updateStatusCache;
+};
+
+app.get('/api/system/update/status', async (req, res) => {
+  const refresh = ['1', 'true', 'yes'].includes(String(req.query?.refresh || '').toLowerCase());
+  const currentVersion = readLocalAppVersion();
+  try {
+    const status = await collectUpdateStatus({ refresh });
+    const newerVersion = Boolean(
+      status.remoteVersion && currentVersion && compareAppVersions(status.remoteVersion, currentVersion) > 0,
+    );
+    const updateAvailable = newerVersion || (status.commitsBehind || 0) > 0;
+    return res.json({
+      ok: !status.error,
+      currentVersion,
+      remoteVersion: status.remoteVersion,
+      commitsBehind: status.commitsBehind,
+      branch: status.branch,
+      updateAvailable,
+      updating: updateApplyLock,
+      lastCheckedAt: new Date(status.checkedAt).toISOString(),
+      error: status.error || null,
+      errorDetail: status.errorDetail || null,
+    });
+  } catch (err) {
+    console.error('[update/status] error', err);
+    return res.status(500).json({
+      ok: false,
+      currentVersion,
+      error: 'update_status_failed',
+      errorDetail: err instanceof Error ? err.message : String(err),
+    });
+  }
+});
+
+app.post('/api/system/update/apply', async (req, res) => {
+  if (updateApplyLock) {
+    return res.status(409).json({ ok: false, error: 'update_in_progress' });
+  }
+  updateApplyLock = true;
+  try {
+    const force = Boolean(req.body?.force);
+    const branch = await detectGitBranch();
+
+    const dirtyRes = await runCommand('git', ['status', '--porcelain']);
+    const dirtyFiles = dirtyRes.stdout.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    let stashed = false;
+    if (dirtyFiles.length > 0) {
+      if (!force) {
+        return res.status(409).json({
+          ok: false,
+          error: 'working_tree_dirty',
+          files: dirtyFiles.slice(0, 20).map((line) => line.replace(/^\S+\s+/, '')),
+        });
+      }
+      const stashRes = await runCommand('git', ['stash', 'push', '--include-untracked', '-m', 'openrig-auto-update']);
+      if (stashRes.code !== 0) {
+        return res.status(500).json({
+          ok: false,
+          error: 'stash_failed',
+          errorDetail: (stashRes.stderr || stashRes.stdout).trim().slice(-500),
+        });
+      }
+      stashed = true;
+    }
+
+    const oldVersion = readLocalAppVersion();
+    const oldHead = (await runCommand('git', ['rev-parse', 'HEAD'])).stdout.trim();
+
+    const pullRes = await runCommand('git', ['pull', '--ff-only', 'origin', branch], { timeout: 5 * 60 * 1000 });
+    if (pullRes.code !== 0) {
+      return res.status(500).json({
+        ok: false,
+        error: 'pull_failed',
+        errorDetail: (pullRes.stderr || pullRes.stdout).trim().slice(-800),
+        stashed,
+      });
+    }
+
+    const newHead = (await runCommand('git', ['rev-parse', 'HEAD'])).stdout.trim();
+    const updated = Boolean(oldHead && newHead && oldHead !== newHead);
+    let npmInstalled = false;
+    let changelog = [];
+
+    if (updated) {
+      const diffRes = await runCommand('git', ['diff', '--name-only', oldHead, newHead]);
+      const changedFiles = diffRes.stdout.split(/\r?\n/).filter(Boolean);
+      if (changedFiles.includes('package.json') || changedFiles.includes('package-lock.json')) {
+        const installRes = await runCommand('npm', ['install', '--legacy-peer-deps'], { timeout: 10 * 60 * 1000 });
+        npmInstalled = installRes.code === 0;
+        if (!npmInstalled) {
+          return res.status(500).json({
+            ok: false,
+            error: 'npm_install_failed',
+            errorDetail: (installRes.stderr || installRes.stdout).trim().slice(-800),
+            updated,
+            stashed,
+          });
+        }
+      }
+      const logRes = await runCommand('git', ['log', '--oneline', '--no-decorate', `${oldHead}..${newHead}`]);
+      changelog = logRes.stdout.split(/\r?\n/).filter(Boolean).slice(0, 30);
+    }
+
+    updateStatusCache = null;
+    return res.json({
+      ok: true,
+      updated,
+      oldVersion,
+      newVersion: readLocalAppVersion(),
+      changelog,
+      npmInstalled,
+      stashed,
+      needsRestart: updated,
+    });
+  } catch (err) {
+    console.error('[update/apply] error', err);
+    return res.status(500).json({
+      ok: false,
+      error: 'update_failed',
+      errorDetail: err instanceof Error ? err.message : String(err),
+    });
+  } finally {
+    updateApplyLock = false;
+  }
+});
+
 app.post('/api/system/supabase/control', async (req, res) => {
   const action = typeof req.body?.action === 'string' ? req.body.action.trim().toLowerCase() : '';
   const validActions = new Set(['start', 'stop', 'status']);

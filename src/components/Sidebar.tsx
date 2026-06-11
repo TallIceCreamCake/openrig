@@ -1,12 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { Menu, X, ChevronUp, ChevronDown } from 'lucide-react';
+import { Menu, X, ChevronDown, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { hasPerm } from '../utils/perm';
 import { supabase } from '../lib/supabase';
 import {
   DEFAULT_MENU_LAYOUT,
-  MENU_ICON_PLACEHOLDER,
   MenuLayoutNode,
   NAV_ITEM_DEFINITIONS,
   NavigationItemDefinition,
@@ -24,6 +23,10 @@ const Sidebar = () => {
   const [menuLayout, setMenuLayout] = useState<MenuLayoutNode[]>(() => cloneMenuLayout(DEFAULT_MENU_LAYOUT));
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const { user } = useAuth();
+
+  // Labels are always visible inside the mobile drawer, regardless of the
+  // desktop collapsed state.
+  const showLabels = isExpanded || isMobileOpen;
 
   useEffect(() => {
     const fetchMenuLayout = async () => {
@@ -106,24 +109,24 @@ const Sidebar = () => {
     setExpandedGroups(prev => ({ ...prev, [groupId]: !prev[groupId] }));
   };
 
-  const renderNavLink = (def: NavigationItemDefinition, depth = 0) => (
+  const renderNavLink = (def: NavigationItemDefinition) => (
     <NavLink
       key={def.key}
       to={def.href}
       onClick={() => setIsMobileOpen(false)}
+      title={!showLabels ? def.name : undefined}
       className={({ isActive }) =>
-        `group flex items-center px-2 py-2 text-sm font-medium rounded-md transition-all duration-200 ${
-          isActive
-            ? 'sidebar-nav-item-active'
-            : 'sidebar-nav-item hover:sidebar-nav-item-hover'
-        } ${isExpanded ? 'justify-start' : 'justify-center'} ${depth > 0 ? 'ml-4' : ''}`
+        `sidebar-link group relative flex items-center rounded-xl text-sm font-medium ${
+          isActive ? 'sidebar-link-active' : ''
+        } ${showLabels ? 'px-3 py-2.5' : 'sidebar-link-rail mx-auto h-11 w-11 justify-center'}`
       }
-      title={!isExpanded ? def.name : undefined}
     >
-      <def.icon className={`h-6 w-6 flex-shrink-0 ${isExpanded ? 'mr-3' : ''}`} />
-      <span className={`transition-all duration-300 ${
-        isExpanded ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-2 md:opacity-0 md:-translate-x-2'
-      } ${isExpanded ? 'block' : 'hidden'}`}>
+      <def.icon className="h-5 w-5 flex-shrink-0" />
+      <span
+        className={`overflow-hidden whitespace-nowrap transition-all duration-300 ${
+          showLabels ? 'ml-3 max-w-[160px] opacity-100' : 'ml-0 max-w-0 opacity-0'
+        }`}
+      >
         {def.name}
       </span>
     </NavLink>
@@ -133,38 +136,41 @@ const Sidebar = () => {
     if (node.type === 'item') {
       return renderNavLink(node.def);
     }
-    const Icon = node.children.find(child => child.type === 'item')?.def.icon || MENU_ICON_PLACEHOLDER;
     const isOpen = expandedGroups[node.id] ?? true;
+
+    // Collapsed rail: a group becomes a subtle divider followed by its items —
+    // an accordion without a visible label would not be usable.
+    if (!showLabels) {
+      return (
+        <div key={node.id} className="space-y-1.5">
+          <div className="sidebar-collapsed-divider" aria-hidden="true" />
+          {node.children.map(child => (child.type === 'item' ? renderNavLink(child.def) : null))}
+        </div>
+      );
+    }
+
     return (
-      <div key={node.id} className="space-y-1">
+      <div key={node.id}>
         <button
           type="button"
           onClick={() => toggleGroup(node.id)}
-          className={`w-full flex items-center px-2 py-2 text-sm font-medium rounded-md transition-colors sidebar-nav-item ${
-            isExpanded ? 'justify-between' : 'justify-center'
+          aria-expanded={isOpen}
+          className="sidebar-group-label w-full flex items-center justify-between gap-2 px-3 pt-5 pb-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] transition-colors"
+        >
+          <span className="truncate">{node.label}</span>
+          <ChevronDown
+            className={`h-3.5 w-3.5 flex-shrink-0 transition-transform duration-200 ${isOpen ? '' : '-rotate-90'}`}
+          />
+        </button>
+        <div
+          className={`grid transition-[grid-template-rows] duration-200 ease-out ${
+            isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
           }`}
         >
-          <div className={`flex items-center ${isExpanded ? '' : 'justify-center w-full'}`}>
-            <Icon className={`h-6 w-6 flex-shrink-0 ${isExpanded ? 'mr-3' : ''}`} />
-            <span className={`transition-all duration-300 ${
-              isExpanded ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-2 md:opacity-0 md:-translate-x-2'
-            } ${isExpanded ? 'block' : 'hidden'}`}>
-              {node.label}
-            </span>
+          <div className="overflow-hidden space-y-1">
+            {node.children.map(child => (child.type === 'item' ? renderNavLink(child.def) : null))}
           </div>
-          {isExpanded && (
-            (isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />)
-          )}
-        </button>
-        {isOpen && (
-          <div className="pl-0 space-y-1">
-            {node.children.map(child =>
-              child.type === 'item'
-                ? renderNavLink(child.def, 1)
-                : null
-            )}
-          </div>
-        )}
+        </div>
       </div>
     );
   });
@@ -175,7 +181,8 @@ const Sidebar = () => {
       <div className="md:hidden fixed top-4 left-4 z-50">
         <button
           onClick={() => setIsMobileOpen(!isMobileOpen)}
-          className="p-2 rounded-md bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 transition-colors dark:bg-gray-800 dark:text-white dark:border-gray-700 dark:hover:bg-gray-700"
+          className="p-2 rounded-xl bg-white border border-gray-200 text-gray-700 shadow-sm hover:bg-gray-50 transition-colors dark:bg-gray-800 dark:text-white dark:border-gray-700 dark:hover:bg-gray-700"
+          aria-label={isMobileOpen ? 'Fermer le menu' : 'Ouvrir le menu'}
         >
           {isMobileOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
         </button>
@@ -184,56 +191,73 @@ const Sidebar = () => {
       {/* Mobile overlay */}
       {isMobileOpen && (
         <div
-          className="md:hidden fixed inset-0 bg-black bg-opacity-50 z-40"
+          className="md:hidden fixed inset-0 bg-black/40 backdrop-blur-sm z-40"
           onClick={() => setIsMobileOpen(false)}
         />
       )}
 
-      {/* Sidebar */}
-      <div
+      {/* Floating sidebar card */}
+      <aside
         className={`
-          fixed md:relative inset-y-0 left-0 z-40
-          flex flex-col border-r transition-all duration-300 ease-in-out
+          sidebar-shell fixed md:relative inset-y-0 left-0 z-40
+          flex flex-col transition-all duration-300 ease-in-out
+          md:my-3 md:ml-3 rounded-r-2xl md:rounded-2xl
+          border-r md:border
           ${isMobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
-          ${isExpanded ? 'w-64' : 'w-16 md:w-16'}
+          w-72 ${isExpanded ? 'md:w-64' : 'md:w-[4.75rem]'}
         `}
-        style={{
-          background: 'var(--sidebar-bg)',
-          borderColor: 'var(--sidebar-border)',
-          color: 'var(--sidebar-text)',
-        }}
       >
         {/* Header */}
-        <div className="flex items-center flex-shrink-0 px-4 py-4">
-          <div className={`transition-all duration-300 ${isExpanded ? 'opacity-100' : 'opacity-0 md:opacity-0'}`}>
-            {isExpanded && (
-              <h1 className="text-xl font-bold whitespace-nowrap" style={{ color: 'var(--sidebar-text)' }}>Open RIG</h1>
-            )}
+        <div className={`flex items-center flex-shrink-0 gap-3 pt-5 pb-4 ${showLabels ? 'px-4' : 'justify-center px-0'}`}>
+          <div className="sidebar-logo-badge h-10 w-10 flex-shrink-0 rounded-xl grid place-items-center">
+            <span className="text-white font-extrabold text-sm leading-none tracking-tight">OR</span>
           </div>
-          {!isExpanded && (
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'var(--accent, #2563eb)' }}>
-              <span className="text-white font-bold text-sm">OR</span>
-            </div>
-          )}
+          <div
+            className={`flex flex-col overflow-hidden whitespace-nowrap transition-all duration-300 ${
+              showLabels ? 'max-w-[160px] opacity-100' : 'max-w-0 opacity-0'
+            }`}
+          >
+            <span className="text-base font-bold tracking-tight leading-tight" style={{ color: 'var(--sidebar-text)' }}>
+              Open RIG
+            </span>
+            <span className="text-[11px] font-medium sidebar-subtle leading-tight">Gestion de parc</span>
+          </div>
         </div>
 
+        <div className="sidebar-header-divider" aria-hidden="true" />
+
         {/* Navigation */}
-        <nav className="flex-1 px-2 space-y-1 overflow-y-auto">
+        <nav className={`sidebar-scroll sidebar-fade flex-1 py-3 space-y-1 overflow-y-auto overflow-x-hidden ${showLabels ? 'px-3' : 'px-2'}`}>
           {renderNavigation()}
         </nav>
 
-        {/* Expand/Collapse button */}
-        <div className="hidden md:flex flex-shrink-0 p-2">
+        {/* Bottom: expand/collapse */}
+        <div className={`hidden md:block flex-shrink-0 pb-3 pt-2 ${showLabels ? 'px-3' : 'px-2'}`}>
+          <div className="sidebar-header-divider mb-2" aria-hidden="true" />
           <button
+            type="button"
             onClick={() => setIsExpanded(!isExpanded)}
-            className="w-full flex items-center justify-center px-2 py-2 text-sm font-medium rounded-md transition-colors sidebar-soft-hover"
+            aria-expanded={isExpanded}
             title={isExpanded ? 'Réduire' : 'Déployer'}
+            className={`sidebar-link group relative flex items-center rounded-xl text-sm font-medium ${
+              showLabels ? 'w-full px-3 py-2.5' : 'sidebar-link-rail mx-auto h-11 w-11 justify-center'
+            }`}
           >
-            <Menu className={`h-5 w-5 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} />
-            {isExpanded && <span className="ml-2">Réduire</span>}
+            {isExpanded ? (
+              <PanelLeftClose className="h-5 w-5 flex-shrink-0" />
+            ) : (
+              <PanelLeftOpen className="h-5 w-5 flex-shrink-0" />
+            )}
+            <span
+              className={`overflow-hidden whitespace-nowrap transition-all duration-300 ${
+                showLabels ? 'ml-3 max-w-[160px] opacity-100' : 'ml-0 max-w-0 opacity-0'
+              }`}
+            >
+              Réduire
+            </span>
           </button>
         </div>
-      </div>
+      </aside>
     </>
   );
 };

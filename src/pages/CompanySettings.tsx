@@ -248,6 +248,98 @@ const CompanySettingsPage: React.FC = () => {
 
   const [fullExporting, setFullExporting] = useState(false);
 
+  type AppUpdateStatus = {
+    ok?: boolean;
+    currentVersion?: string | null;
+    remoteVersion?: string | null;
+    commitsBehind?: number | null;
+    branch?: string | null;
+    updateAvailable?: boolean;
+    lastCheckedAt?: string | null;
+    error?: string | null;
+    errorDetail?: string | null;
+  };
+  type AppUpdateResult = {
+    newVersion: string | null;
+    changelog: string[];
+    npmInstalled: boolean;
+    needsRestart: boolean;
+  };
+  const [updateStatus, setUpdateStatus] = useState<AppUpdateStatus | null>(null);
+  const [updateChecking, setUpdateChecking] = useState(false);
+  const [updateApplying, setUpdateApplying] = useState(false);
+  const [updateResult, setUpdateResult] = useState<AppUpdateResult | null>(null);
+  const [updateDirtyFiles, setUpdateDirtyFiles] = useState<string[] | null>(null);
+
+  const fetchUpdateStatus = async (refresh: boolean) => {
+    setUpdateChecking(true);
+    try {
+      const res = await fetch(`/api/system/update/status${refresh ? '?refresh=1' : ''}`);
+      const data: AppUpdateStatus = await res.json();
+      setUpdateStatus(data);
+      if (refresh) {
+        if (data.error) {
+          toast.error('Vérification impossible : ' + (data.errorDetail || data.error));
+        } else if (data.updateAvailable) {
+          toast.success(`Mise à jour disponible : ${data.remoteVersion || 'nouvelle version'}`);
+        } else {
+          toast.success('OpenRig est à jour.');
+        }
+      }
+    } catch (err) {
+      console.error('update status', err);
+      if (refresh) toast.error('Vérification des mises à jour impossible.');
+    } finally {
+      setUpdateChecking(false);
+    }
+  };
+
+  const applyAppUpdate = async (force = false) => {
+    setUpdateApplying(true);
+    setUpdateDirtyFiles(null);
+    try {
+      const res = await fetch('/api/system/update/apply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ force }),
+      });
+      const data = await res.json();
+      if (res.status === 409 && data?.error === 'working_tree_dirty') {
+        setUpdateDirtyFiles(Array.isArray(data.files) ? data.files : []);
+        toast.error('Des modifications locales bloquent la mise à jour.');
+        return;
+      }
+      if (!res.ok || !data?.ok) {
+        toast.error('Mise à jour échouée : ' + (data?.errorDetail || data?.error || res.status));
+        return;
+      }
+      if (!data.updated) {
+        toast.success('OpenRig est déjà à jour.');
+      } else {
+        setUpdateResult({
+          newVersion: data.newVersion ?? null,
+          changelog: Array.isArray(data.changelog) ? data.changelog : [],
+          npmInstalled: Boolean(data.npmInstalled),
+          needsRestart: Boolean(data.needsRestart),
+        });
+        toast.success(`Mise à jour installée : ${data.newVersion || ''}`);
+      }
+      await fetchUpdateStatus(false);
+    } catch (err) {
+      console.error('update apply', err);
+      toast.error('Mise à jour impossible (serveur injoignable ?).');
+    } finally {
+      setUpdateApplying(false);
+    }
+  };
+
+  useEffect(() => {
+    if (active === 'about' && !updateStatus && !updateChecking) {
+      void fetchUpdateStatus(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active]);
+
   const [mailHost, setMailHost] = useState('');
   const [mailPort, setMailPort] = useState('');
   const [mailSecure, setMailSecure] = useState(false);
@@ -1688,35 +1780,114 @@ const CompanySettingsPage: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="rounded-xl border border-dashed border-gray-200 p-4 shadow-sm flex flex-col gap-4">
+                <div className="rounded-xl border border-gray-200 p-4 shadow-sm flex flex-col gap-4">
                   <div className="flex items-center gap-3">
-                    <RefreshCcw className="h-5 w-5 text-sky-500" />
+                    <RefreshCcw className={`h-5 w-5 text-sky-500 ${updateChecking || updateApplying ? 'animate-spin' : ''}`} />
                     <div>
                       <h4 className="text-sm font-semibold text-gray-900">Mises à jour</h4>
-                      <p className="text-xs text-gray-500">Suivi de la version CRM et déclenchement manuel.</p>
+                      <p className="text-xs text-gray-500">Comparaison avec le dépôt GitHub et installation en un clic.</p>
                     </div>
                   </div>
+
                   <dl className="space-y-2 text-sm text-gray-700">
                     <div className="flex items-center justify-between">
-                      <dt>Version CRM</dt>
-                      <dd className="font-medium">v3.4.2</dd>
+                      <dt>Version installée</dt>
+                      <dd className="font-semibold">{updateStatus?.currentVersion ? `build ${updateStatus.currentVersion}` : '—'}</dd>
                     </div>
                     <div className="flex items-center justify-between">
-                      <dt>Build</dt>
-                      <dd>{import.meta.env.VITE_APP_BUILD ?? '2025.03.14'}</dd>
+                      <dt>Version disponible</dt>
+                      <dd className={updateStatus?.updateAvailable ? 'font-semibold text-emerald-600' : ''}>
+                        {updateStatus?.remoteVersion ? `build ${updateStatus.remoteVersion}` : '—'}
+                      </dd>
                     </div>
+                    <div className="flex items-center justify-between">
+                      <dt>Branche suivie</dt>
+                      <dd className="text-gray-500">{updateStatus?.branch || '—'}</dd>
+                    </div>
+                    {typeof updateStatus?.commitsBehind === 'number' && updateStatus.commitsBehind > 0 && (
+                      <div className="flex items-center justify-between">
+                        <dt>Retard</dt>
+                        <dd className="text-amber-600 font-medium">{updateStatus.commitsBehind} commit{updateStatus.commitsBehind > 1 ? 's' : ''}</dd>
+                      </div>
+                    )}
+                    {updateStatus?.lastCheckedAt && (
+                      <div className="flex items-center justify-between text-xs text-gray-400">
+                        <dt>Dernière vérification</dt>
+                        <dd>{new Date(updateStatus.lastCheckedAt).toLocaleString()}</dd>
+                      </div>
+                    )}
                   </dl>
-                  <p className="text-sm text-gray-600">
-                    Lancez une vérification fictive afin de simuler la recherche de nouvelles mises à jour du CRM. Aucun changement réel n'est appliqué.
-                  </p>
-                  <button
-                    type="button"
-                    className="inline-flex items-center justify-center gap-2 rounded-md border border-sky-500 px-3 py-2 text-sm font-medium text-sky-600 hover:bg-sky-50"
-                    onClick={() => toast.success('Aucune mise à jour disponible (simulation).')}
-                  >
-                    <RefreshCcw className="h-4 w-4" />
-                    Rechercher des mises à jour
-                  </button>
+
+                  {updateStatus?.error && (
+                    <p className="text-sm text-red-600">
+                      Impossible de joindre le dépôt : {updateStatus.errorDetail || updateStatus.error}
+                    </p>
+                  )}
+
+                  {updateStatus && !updateStatus.error && !updateStatus.updateAvailable && (
+                    <p className="inline-flex items-center gap-2 text-sm text-emerald-600">
+                      <CheckCircle2 className="h-4 w-4" /> OpenRig est à jour.
+                    </p>
+                  )}
+
+                  {updateDirtyFiles && (
+                    <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800 space-y-2">
+                      <p className="font-medium">Des modifications locales non commit bloquent la mise à jour :</p>
+                      <ul className="list-disc pl-5 text-xs max-h-24 overflow-y-auto">
+                        {updateDirtyFiles.map((file) => <li key={file}>{file}</li>)}
+                      </ul>
+                      <button
+                        type="button"
+                        disabled={updateApplying}
+                        onClick={() => { void applyAppUpdate(true); }}
+                        className="inline-flex items-center gap-2 rounded-md border border-amber-500 px-3 py-1.5 text-amber-700 hover:bg-amber-100 disabled:opacity-60"
+                      >
+                        Forcer (mettre les modifications de côté)
+                      </button>
+                    </div>
+                  )}
+
+                  {updateResult && (
+                    <div className="rounded-md border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-800 space-y-2">
+                      <p className="font-medium">
+                        Mise à jour vers la build {updateResult.newVersion} installée
+                        {updateResult.npmInstalled ? ' (dépendances réinstallées)' : ''}.
+                      </p>
+                      {updateResult.changelog.length > 0 && (
+                        <ul className="list-disc pl-5 text-xs max-h-32 overflow-y-auto font-mono">
+                          {updateResult.changelog.map((line) => <li key={line}>{line}</li>)}
+                        </ul>
+                      )}
+                      {updateResult.needsRestart && (
+                        <p className="font-semibold">
+                          Redémarrez l'application (relancez « npm run start » ou « npm run start:full ») pour appliquer la mise à jour du serveur.
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="flex flex-wrap gap-2 justify-end">
+                    <button
+                      type="button"
+                      disabled={updateChecking || updateApplying}
+                      className="inline-flex items-center justify-center gap-2 rounded-md border border-sky-500 px-3 py-2 text-sm font-medium text-sky-600 hover:bg-sky-50 disabled:cursor-not-allowed disabled:opacity-60"
+                      onClick={() => { void fetchUpdateStatus(true); }}
+                    >
+                      <RefreshCcw className={`h-4 w-4 ${updateChecking ? 'animate-spin' : ''}`} />
+                      {updateChecking ? 'Vérification...' : 'Rechercher des mises à jour'}
+                    </button>
+                    {updateStatus?.updateAvailable && (
+                      <button
+                        type="button"
+                        disabled={updateApplying || updateChecking}
+                        className="inline-flex items-center justify-center gap-2 rounded-md bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                        onClick={() => { void applyAppUpdate(false); }}
+                      >
+                        {updateApplying ? <RefreshCcw className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                        {updateApplying ? 'Installation...' : 'Installer la mise à jour'}
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
