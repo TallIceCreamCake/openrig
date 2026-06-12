@@ -498,7 +498,7 @@ const RentalMilestonesPanel: React.FC<Props> = ({ rental, onLog }) => {
       </div>
 
       {showModal && createPortal(
-        <div className="fixed inset-0 z-[100] flex items-center justify-center">
+        <div className="fixed inset-0 z-[12050] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/40" onClick={() => !saving && setShowModal(false)} />
           <div className="relative w-full max-w-3xl mx-4 rounded-2xl bg-white shadow-xl">
             <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
@@ -711,7 +711,7 @@ const RentalMilestonesPanel: React.FC<Props> = ({ rental, onLog }) => {
             : 'Matériel';
 
         return (
-          <div className="fixed inset-0 z-[110] flex items-center justify-center">
+          <div className="fixed inset-0 z-[12054] flex items-center justify-center">
             <div className="absolute inset-0 bg-black/40" onClick={closePicker} />
             <div className="relative w-full max-w-xl mx-4 rounded-2xl bg-white shadow-xl">
               <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
@@ -782,7 +782,7 @@ const RentalMilestonesPanel: React.FC<Props> = ({ rental, onLog }) => {
       })(), document.body)}
 
       {detailMilestone && createPortal((
-        <div className="fixed inset-0 z-[105] flex items-center justify-center">
+        <div className="fixed inset-0 z-[12052] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/40" onClick={closeDetails} />
           <div className="relative w-full max-w-2xl mx-4 rounded-2xl bg-white shadow-xl">
             <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">

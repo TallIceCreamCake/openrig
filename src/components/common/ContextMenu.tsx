@@ -61,7 +61,7 @@ const ContextMenu: React.FC<Props> = ({ x, y, items, onClose }) => {
     <div
       ref={ref}
       style={{ top: adjY, left: adjX }}
-      className="fixed z-[9999] min-w-[190px] bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-2xl py-1 select-none"
+      className="fixed z-[12070] min-w-[190px] bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-2xl py-1 select-none"
       onContextMenu={(e) => e.preventDefault()}
     >
       {items.map((item, i) => {

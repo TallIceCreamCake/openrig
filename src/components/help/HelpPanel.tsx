@@ -764,7 +764,7 @@ const HelpPanel: React.FC<HelpPanelProps> = ({ isOpen, onClose }) => {
       {/* Transparent full-screen overlay — closes the panel on outside click */}
       {createPortal(
         <div
-          className="fixed inset-0 z-[44]"
+          className="fixed inset-0 z-[12000]"
           style={{ pointerEvents: isOpen ? 'auto' : 'none' }}
           onMouseDown={onClose}
         />,

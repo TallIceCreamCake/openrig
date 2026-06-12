@@ -471,7 +471,7 @@ const ServiceTable: React.FC<ServiceTableProps> = ({
 
       {contextMenu && contextTarget && (
         <div
-          className="fixed z-50 w-44 rounded-lg border border-slate-200 bg-white py-1 shadow-xl"
+          className="fixed z-[12040] w-44 rounded-lg border border-slate-200 bg-white py-1 shadow-xl"
           style={{ top: contextMenu.y, left: contextMenu.x }}
           role="menu"
         >

@@ -2,13 +2,28 @@ import puppeteer from 'puppeteer';
 
 let browserPromise = null;
 
+const isBrowserUsable = (browser) => {
+  if (!browser) return false;
+  if (typeof browser.connected === 'boolean') return browser.connected;
+  if (typeof browser.isConnected === 'function') return browser.isConnected();
+  return true;
+};
+
 const getBrowser = async () => {
-  if (!browserPromise) {
-    browserPromise = puppeteer.launch({
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
-      headless: 'new',
-    });
+  if (browserPromise) {
+    const existing = await browserPromise.catch(() => null);
+    if (isBrowserUsable(existing)) return existing;
+    // Crashed, disconnected, or failed to launch: forget it and relaunch.
+    browserPromise = null;
   }
+  browserPromise = puppeteer.launch({
+    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+    headless: 'new',
+  }).catch((err) => {
+    // Never cache a failed launch, or every later PDF would fail too.
+    browserPromise = null;
+    throw err;
+  });
   return browserPromise;
 };
 

@@ -1414,7 +1414,7 @@ const TemplateEditor: React.FC<Props> = ({ settings, onSave, canEdit = false }) 
       </div>
 
       {studioOpen && (
-        <div className="fixed inset-0 z-[70] min-h-0 bg-[#2f353d] lg:pl-20">
+        <div className="fixed inset-0 z-[12044] min-h-0 bg-[#2f353d] lg:pl-20">
           <div className="absolute inset-0 flex min-h-0">
             <aside className="hidden w-14 flex-col items-center gap-2 border-r border-[#31363e] bg-[#13171d] py-3 md:flex">
               {[FileText, Table2, Sparkles, LayoutPanelTop, Settings2].map((Icon, idx) => (
@@ -1825,7 +1825,7 @@ const TemplateEditor: React.FC<Props> = ({ settings, onSave, canEdit = false }) 
       )}
 
       {showStylePopup && selectedBlock && (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4">
+        <div className="fixed inset-0 z-[12046] flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-2xl rounded-xl border border-slate-700 bg-slate-900 p-4 text-slate-100 shadow-2xl">
             <div className="mb-3 flex items-center justify-between">
               <div>

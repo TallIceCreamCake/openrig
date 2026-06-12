@@ -227,7 +227,7 @@ const DeliveryOffersPanel: React.FC<Props> = ({ createSignal = 0 }) => {
       />
 
       {showFormModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="fixed inset-0 z-[12040] flex items-center justify-center">
           <div
             className="absolute inset-0 bg-black/40"
             onClick={saving ? undefined : closeForm}

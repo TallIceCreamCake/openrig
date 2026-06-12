@@ -236,7 +236,7 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-[12040] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div className="relative bg-white rounded-lg shadow-xl w-full max-w-2xl mx-4">
         <div className="flex justify-between items-center px-6 py-4 border-b">

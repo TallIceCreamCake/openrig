@@ -359,7 +359,7 @@ const SetupDatabasePage: React.FC = () => {
       </div>
 
       {showHelp && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4">
+        <div className="fixed inset-0 z-[12040] flex items-center justify-center bg-slate-900/40 px-4">
           <div className="w-full max-w-xl space-y-4 rounded-3xl bg-white p-6 shadow-xl">
             <div className="flex items-start justify-between gap-4">
               <div>

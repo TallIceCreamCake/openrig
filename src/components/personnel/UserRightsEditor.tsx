@@ -571,7 +571,7 @@ const UserRightsEditor: React.FC = () => {
             </tbody>
           </table>
           {confirmSuperFor && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+            <div className="fixed inset-0 z-[12040] flex items-center justify-center bg-black/40">
               <div className="bg-white rounded-lg shadow-lg w-full max-w-md p-5">
                 <h4 className="text-lg font-medium text-gray-900 mb-2">Confirmer Superadmin</h4>
                 <p className="text-sm text-gray-600">Accorder le rôle Superadmin donne tous les droits et verrouille les autres permissions. Confirmez-vous ?</p>

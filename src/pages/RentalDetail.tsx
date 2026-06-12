@@ -7764,7 +7764,7 @@ const RentalDetail = () => {
                 </div>
               )}
               {dossierPreviewEntry && dossierPreviewEntry.file_url && createPortal((
-                <div className="fixed inset-0 z-[90] flex items-center justify-center">
+                <div className="fixed inset-0 z-[12048] flex items-center justify-center">
                   <div
                     className="absolute inset-0 bg-black/60"
                     onClick={() => setDossierPreviewEntryId(null)}
@@ -7812,7 +7812,7 @@ const RentalDetail = () => {
                 </div>
               ), document.body)}
               {dossierInfoEntry && createPortal((
-                <div className="fixed inset-0 z-[90] flex items-center justify-center">
+                <div className="fixed inset-0 z-[12048] flex items-center justify-center">
                   <div
                     className="absolute inset-0 bg-black/40"
                     onClick={() => setDossierInfoEntryId(null)}
@@ -7899,7 +7899,7 @@ const RentalDetail = () => {
                 </div>
               ), document.body)}
               {dossierNameModalOpen && createPortal((
-                <div className="fixed inset-0 z-[90] flex items-center justify-center">
+                <div className="fixed inset-0 z-[12048] flex items-center justify-center">
                   <div
                     className="absolute inset-0 bg-black/40"
                     onClick={() => !dossierNameModalSaving && closeDossierNameModal()}
@@ -7998,7 +7998,7 @@ const RentalDetail = () => {
                 </div>
               ), document.body)}
               {dossierShareModalOpen && createPortal((
-                <div className="fixed inset-0 z-[90] flex items-center justify-center">
+                <div className="fixed inset-0 z-[12048] flex items-center justify-center">
                   <div
                     className="absolute inset-0 bg-black/40"
                     onClick={closeDossierShareModal}
@@ -8212,7 +8212,7 @@ const RentalDetail = () => {
                 </div>
               ), document.body)}
               {dossierShareListOpen && createPortal((
-                <div className="fixed inset-0 z-[100] flex items-center justify-center">
+                <div className="fixed inset-0 z-[12050] flex items-center justify-center">
                   <div className="absolute inset-0 bg-black/40" />
                   <div className="relative w-full max-w-2xl rounded-lg bg-white p-5 shadow-lg">
                     <h3 className="text-lg font-semibold text-slate-900">Liens existants</h3>
@@ -8304,7 +8304,7 @@ const RentalDetail = () => {
                 </div>
               ), document.body)}
               {dossierWhitelistModalOpen && createPortal((
-                <div className="fixed inset-0 z-[110] flex items-center justify-center">
+                <div className="fixed inset-0 z-[12054] flex items-center justify-center">
                   <div className="absolute inset-0 bg-black/40" />
                   <div className="relative w-full max-w-2xl rounded-lg bg-white p-5 shadow-lg">
                     <h3 className="text-lg font-semibold text-slate-900">Whitelist</h3>
@@ -8498,7 +8498,7 @@ const RentalDetail = () => {
       </StepTransition>
 
       {showCancelModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="fixed inset-0 z-[12040] flex items-center justify-center">
           <div
             className="absolute inset-0 bg-black/40"
             onClick={() => {
@@ -8622,7 +8622,7 @@ const RentalDetail = () => {
       )}
 
       {showPaymentModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="fixed inset-0 z-[12040] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/40" onClick={handleClosePaymentModal} />
           <div className="relative w-full max-w-md mx-4 rounded-lg bg-white p-6 shadow-lg">
             <h3 className="text-lg font-medium text-gray-900">Enregistrer un paiement</h3>
@@ -8710,7 +8710,7 @@ const RentalDetail = () => {
       )}
 
       {showDeleteOptions && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="fixed inset-0 z-[12040] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/40" onClick={deleteBusy ? undefined : () => setShowDeleteOptions(false)} />
           <div className="relative w-full max-w-md mx-4 rounded-lg bg-white p-6 shadow-lg">
             <h3 className="text-lg font-medium text-gray-900">{`Supprimer la ${typeLabelLower}`}</h3>
@@ -8765,7 +8765,7 @@ const RentalDetail = () => {
       />
 
       {showSendDocModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="fixed inset-0 z-[12040] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/40" onClick={closeSendDocumentModal} />
           <div className="relative w-full max-w-md mx-4 rounded-lg bg-white p-6 shadow-lg">
             <h3 className="text-lg font-medium text-gray-900">Envoyer le document</h3>
@@ -8821,7 +8821,7 @@ const RentalDetail = () => {
 
       {/* Popup : modifications non vues (client ou app) */}
       {showModificationPopup && pendingModificationRequests.length > 0 && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[12040] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/40" onClick={closeModificationPopup} />
           <div className="relative w-full max-w-md rounded-xl bg-white dark:bg-gray-900 shadow-xl overflow-hidden border border-amber-200 dark:border-amber-700">
             <div className="flex items-center gap-3 px-5 py-4 bg-amber-50 dark:bg-amber-900/30 border-b border-amber-200 dark:border-amber-700">
@@ -8871,7 +8871,7 @@ const RentalDetail = () => {
 
       {/* Modal : envoyer une demande de modification (côté app) */}
       {showSendModificationModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[12040] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/40" onClick={() => !sendingModification && setShowSendModificationModal(false)} />
           <div className="relative w-full max-w-md rounded-xl bg-white dark:bg-gray-900 shadow-xl overflow-hidden">
             <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-100 dark:border-gray-800">
@@ -8918,7 +8918,7 @@ const RentalDetail = () => {
       )}
 
       {showApprovalRequestModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[12040] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/40" onClick={closeApprovalModal} />
           <div className="relative w-full max-w-md rounded-xl bg-white shadow-xl overflow-hidden">
             {/* Header */}
@@ -9034,7 +9034,7 @@ const RentalDetail = () => {
       )}
 
       {showDocShareModal && docShareTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="fixed inset-0 z-[12040] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/40" onClick={closeDocShareModal} />
           <div className="relative w-full max-w-md mx-4 rounded-lg bg-white p-6 shadow-lg">
             <h3 className="text-lg font-medium text-gray-900">Partager le document</h3>
@@ -9114,7 +9114,7 @@ const RentalDetail = () => {
       )}
 
       {showQuoteExpiredModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="fixed inset-0 z-[12040] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/40" onClick={() => setShowQuoteExpiredModal(false)} />
           <div className="relative w-full max-w-md mx-4 rounded-lg bg-white p-6 shadow-lg">
             <h3 className="text-lg font-medium text-gray-900">Devis expiré</h3>
@@ -9135,7 +9135,7 @@ const RentalDetail = () => {
       )}
 
       {showQuoteInvalidatedModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="fixed inset-0 z-[12040] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/40" onClick={() => setShowQuoteInvalidatedModal(false)} />
           <div className="relative w-full max-w-md mx-4 rounded-lg bg-white p-6 shadow-lg">
             <h3 className="text-lg font-medium text-gray-900">Devis annulé</h3>
@@ -9286,7 +9286,7 @@ const RentalDetail = () => {
         />
       )}
       {isService && isSavingOverlayVisible && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[12040] flex items-center justify-center bg-gray-900/40 backdrop-blur-sm">
           <div className="flex flex-col items-center space-y-3 rounded-lg bg-white/90 px-6 py-5 shadow-xl">
             <div className="h-10 w-10 animate-spin rounded-full border-2 border-gray-300 border-t-transparent" />
             <p className="text-sm font-medium text-gray-700">Enregistrement...</p>

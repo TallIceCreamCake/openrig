@@ -1463,7 +1463,7 @@ const PersonnelDetail: React.FC = () => {
       </div>
 
       {isSavingOverlayVisible && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[12040] flex items-center justify-center bg-gray-900/40 backdrop-blur-sm">
           <div className="flex flex-col items-center space-y-3 rounded-lg bg-white/90 px-6 py-5 shadow-xl">
             <div className="h-10 w-10 animate-spin rounded-full border-2 border-gray-300 border-t-transparent" />
             <p className="text-sm font-medium text-gray-700">

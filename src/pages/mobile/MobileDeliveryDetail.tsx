@@ -354,7 +354,7 @@ const MobileDeliveryDetail: React.FC = () => {
       </div>
 
       {gpsOpen && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center">
+        <div className="fixed inset-0 z-[12040] flex items-end justify-center">
           <div className="absolute inset-0 bg-black/40" onClick={() => setGpsOpen(false)} />
           <div className="relative w-full max-w-lg rounded-t-2xl bg-white px-4 py-5 shadow-xl">
             <div className="text-sm font-semibold text-gray-900">Ouvrir dans</div>

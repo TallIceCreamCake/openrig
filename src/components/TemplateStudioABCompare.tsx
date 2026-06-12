@@ -169,7 +169,7 @@ const ABCompareOverlay: React.FC<ABCompareOverlayProps> = ({
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex flex-col bg-gray-950">
+    <div className="fixed inset-0 z-[12070] flex flex-col bg-gray-950">
 
       {/* Top bar */}
       <div className="flex items-center h-12 px-5 bg-gray-900 border-b border-gray-800 shrink-0 gap-4">

@@ -30,7 +30,7 @@ const EquipmentTooltip: React.FC<Props> = ({ data, anchorX, anchorY }) => {
     <div
       ref={ref}
       style={{ top: y, left: x, width: TOOLTIP_W }}
-      className="fixed z-[9999] pointer-events-none"
+      className="fixed z-[12070] pointer-events-none"
     >
       <div className="flex gap-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl p-2 items-center">
         {/* Image */}

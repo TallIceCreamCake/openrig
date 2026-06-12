@@ -134,7 +134,9 @@ function App() {
       <DatabaseStatusProvider>
         <TranslationProvider>
           <AuthProvider>
-            <Toaster position="top-right" />
+            {/* Au-dessus de la bande des modales (z-12040+) pour rester visible
+                quand un toast est émis depuis une popup ouverte. */}
+            <Toaster position="top-right" containerStyle={{ zIndex: 13000 }} />
             <SetupGate>
             <Routes>
               <Route path="/login" element={<LoginPage />} />

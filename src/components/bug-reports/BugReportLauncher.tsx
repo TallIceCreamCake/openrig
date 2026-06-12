@@ -153,7 +153,7 @@ const BugReportLauncher: React.FC = () => {
       </button>
 
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-950/45 px-4 py-6 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[12040] flex items-center justify-center bg-gray-950/45 px-4 py-6 backdrop-blur-sm">
           <div className="w-full max-w-2xl overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-gray-800 dark:bg-gray-900">
             <div className="flex items-start justify-between border-b border-gray-200 px-5 py-4 dark:border-gray-800">
               <div>

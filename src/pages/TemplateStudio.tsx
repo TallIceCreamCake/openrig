@@ -9015,7 +9015,7 @@ const TemplateStudio: React.FC = () => {
       {blockContextMenu && (
         <div
           ref={blockContextMenuRef}
-          className="fixed z-50 min-w-[190px] rounded-md border border-[#3e4650] bg-[#151a20] p-1 shadow-[0_16px_36px_rgba(0,0,0,0.45)]"
+          className="fixed z-[12040] min-w-[190px] rounded-md border border-[#3e4650] bg-[#151a20] p-1 shadow-[0_16px_36px_rgba(0,0,0,0.45)]"
           style={{
             left: `min(${blockContextMenu.x}px, calc(100vw - 206px))`,
             top: `min(${blockContextMenu.y}px, calc(100vh - 56px))`,

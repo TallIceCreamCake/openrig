@@ -488,7 +488,7 @@ const RentalsTable: React.FC<RentalsTableProps> = ({
       />
 
       {deleteChoiceOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="fixed inset-0 z-[12040] flex items-center justify-center">
           <div
             className="absolute inset-0 bg-black/40"
             onClick={deleteChoiceAction ? undefined : () => setDeleteChoiceOpen(false)}

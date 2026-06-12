@@ -68,7 +68,7 @@ const MaintenanceProcedureWizard: React.FC<Props> = ({ isOpen, onClose, onSubmit
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-[12040] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div className="relative bg-white rounded-lg shadow-xl w-full max-w-2xl mx-4">
         <div className="px-6 pt-5">

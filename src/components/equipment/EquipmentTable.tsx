@@ -415,7 +415,7 @@ const EquipmentTable: React.FC<EquipmentTableProps> = ({
 
       {contextMenu && contextTarget && (
         <div
-          className="fixed z-50 w-48 rounded-lg border border-slate-200 bg-white py-1 shadow-xl"
+          className="fixed z-[12040] w-48 rounded-lg border border-slate-200 bg-white py-1 shadow-xl"
           style={{ top: contextMenu.y, left: contextMenu.x }}
           role="menu"
         >

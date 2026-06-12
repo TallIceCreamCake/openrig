@@ -187,7 +187,7 @@ const DepotScanModal: React.FC<DepotScanModalProps> = ({ isOpen, busy = false, o
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+    <div className="fixed inset-0 z-[12040] flex items-center justify-center px-4">
       <div className="absolute inset-0 bg-black/50" onClick={!busy ? onClose : undefined} />
       <div className="relative w-full max-w-lg rounded-2xl border border-gray-200 bg-white p-4 shadow-2xl">
         <div className="mb-3 flex items-center justify-between">

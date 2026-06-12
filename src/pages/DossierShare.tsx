@@ -1145,7 +1145,7 @@ const DossierShare: React.FC = () => {
           </div>
           {contextMenu && createPortal((
             <div
-              className="fixed z-[120] w-56 rounded-md border border-slate-200 bg-white shadow-lg"
+              className="fixed z-[12050] w-56 rounded-md border border-slate-200 bg-white shadow-lg"
               style={{ left: contextMenu.x, top: contextMenu.y }}
               onClick={(event) => event.stopPropagation()}
               onContextMenu={(event) => event.preventDefault()}
@@ -1338,7 +1338,7 @@ const DossierShare: React.FC = () => {
       />
 
       {previewEntry && previewEntry.file_url && createPortal((
-        <div className="fixed inset-0 z-[90] flex items-center justify-center">
+        <div className="fixed inset-0 z-[12048] flex items-center justify-center">
           <div
             className="absolute inset-0 bg-black/60"
             onClick={() => setPreviewEntryId(null)}
@@ -1386,7 +1386,7 @@ const DossierShare: React.FC = () => {
         </div>
       ), document.body)}
       {infoEntry && createPortal((
-        <div className="fixed inset-0 z-[90] flex items-center justify-center">
+        <div className="fixed inset-0 z-[12048] flex items-center justify-center">
           <div
             className="absolute inset-0 bg-black/40"
             onClick={() => setInfoEntryId(null)}
@@ -1473,7 +1473,7 @@ const DossierShare: React.FC = () => {
         </div>
       ), document.body)}
       {nameModalOpen && createPortal((
-        <div className="fixed inset-0 z-[90] flex items-center justify-center">
+        <div className="fixed inset-0 z-[12048] flex items-center justify-center">
           <div
             className="absolute inset-0 bg-black/40"
             onClick={() => !nameModalSaving && closeNameModal()}

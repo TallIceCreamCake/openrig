@@ -27,7 +27,7 @@ const EquipmentImageModal: React.FC<EquipmentImageModalProps> = ({ isOpen, initi
   const previewSrc = url.trim().length > 0 ? url.trim() : initialUrl?.trim() || '';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 backdrop-blur-sm px-4">
+    <div className="fixed inset-0 z-[12040] flex items-center justify-center bg-gray-900/40 backdrop-blur-sm px-4">
       <div className="relative w-full max-w-md rounded-lg bg-white p-6 shadow-2xl">
         <button
           type="button"

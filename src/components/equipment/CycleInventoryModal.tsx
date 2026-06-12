@@ -416,7 +416,7 @@ const CycleInventoryModal: React.FC<Props> = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[12048] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
 
       <div className="relative z-[91] w-full max-w-[1450px] max-h-[94vh] overflow-hidden rounded-2xl bg-white shadow-2xl">

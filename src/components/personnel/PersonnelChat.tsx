@@ -1582,7 +1582,7 @@ const beginReply = (target: PersonnelChatMessageReference) => {
       </div>
 
       {showNewConversation && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+        <div className="fixed inset-0 z-[12040] flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-md rounded-lg bg-white shadow-xl">
           <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
             <div>
@@ -1636,7 +1636,7 @@ const beginReply = (target: PersonnelChatMessageReference) => {
 
       {reactionDetails && reactionMessage && (
         <div
-          className="fixed inset-0 z-50 bg-black/20"
+          className="fixed inset-0 z-[12040] bg-black/20"
           onClick={() => setReactionDetails(null)}
           onContextMenu={(event) => event.preventDefault()}
         >
@@ -1701,7 +1701,7 @@ const beginReply = (target: PersonnelChatMessageReference) => {
 
       {attachmentPreview && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          className="fixed inset-0 z-[12040] flex items-center justify-center bg-black/60 p-4"
           onClick={() => setAttachmentPreview(null)}
         >
           <div
@@ -1761,7 +1761,7 @@ const beginReply = (target: PersonnelChatMessageReference) => {
 
       {linkModalType && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          className="fixed inset-0 z-[12040] flex items-center justify-center bg-black/40 p-4"
           onClick={closeLinkModal}
         >
           <div

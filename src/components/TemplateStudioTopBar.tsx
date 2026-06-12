@@ -117,7 +117,7 @@ const TemplateStudioTopBar: React.FC = () => {
   // ── B overlay (full-screen PDF) ────────────────────────────────────────────
   const bOverlay = previewMode === 'B'
     ? createPortal(
-        <div className="fixed inset-0 z-[9999] flex flex-col bg-gray-950">
+        <div className="fixed inset-0 z-[12070] flex flex-col bg-gray-950">
 
           {/* Top bar */}
           <div className="flex items-center h-12 px-4 bg-gray-900 border-b border-gray-800 shrink-0 gap-3">

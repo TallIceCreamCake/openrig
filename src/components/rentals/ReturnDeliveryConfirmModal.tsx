@@ -93,7 +93,7 @@ const ReturnDeliveryConfirmModal: React.FC<Props> = ({ isOpen, onClose, rental, 
   const deliveryTotal = rental.delivery_total_amount != null ? `${rental.delivery_total_amount.toFixed(2)} €` : '—';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-[12040] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div className="relative w-full max-w-xl mx-4 rounded-2xl bg-white shadow-xl">
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">

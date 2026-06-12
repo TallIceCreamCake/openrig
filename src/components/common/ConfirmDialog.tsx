@@ -23,7 +23,7 @@ const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
 }) => {
   if (!isOpen) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-[12060] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40" onClick={loading ? undefined : onCancel} />
       <div className="relative bg-white rounded-lg shadow-lg w-full max-w-sm mx-4 p-5">
         <h3 className="text-lg font-medium text-gray-900">{title}</h3>

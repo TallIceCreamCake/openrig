@@ -1010,7 +1010,7 @@ const RentalEquipmentList: React.FC<RentalEquipmentListProps> = ({
 
       {/* Subrent detail popup */}
       {subrentDetail && createPortal(
-        <div className="fixed inset-0 z-[200] flex items-center justify-center">
+        <div className="fixed inset-0 z-[12060] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/40" onClick={() => setSubrentDetail(null)} />
           <div className="relative bg-white dark:bg-gray-900 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 w-full max-w-sm mx-4 p-5">
             <button

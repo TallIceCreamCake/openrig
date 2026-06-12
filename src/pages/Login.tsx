@@ -544,7 +544,7 @@ const LoginPage: React.FC = () => {
         </div>
       </div>
       {showForgot && (
-        <div className="fixed inset-0 z-30 flex items-center justify-center bg-slate-900/50 px-4">
+        <div className="fixed inset-0 z-[12040] flex items-center justify-center bg-slate-900/50 px-4">
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
             <div className="flex items-center justify-between">
               <div>

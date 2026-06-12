@@ -698,7 +698,7 @@ const EquipmentStockTable: React.FC<EquipmentStockTableProps> = ({
       </div>
 
       {selectedUnit && selectedStatus && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[12040] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/40" onClick={closeDetails} />
           <div className="relative z-10 w-full max-w-3xl overflow-hidden rounded-xl bg-white shadow-2xl max-h-[92vh]">
             <div className="flex items-start justify-between border-b border-gray-200 px-5 py-4">

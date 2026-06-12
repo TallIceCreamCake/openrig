@@ -275,7 +275,7 @@ export const DatabaseOfflineOverlay: React.FC = () => {
   }
 
   return (
-    <div className="fixed inset-0 z-[9999] flex w-screen h-screen bg-gradient-to-br from-white via-slate-50 to-blue-50 text-slate-800">
+    <div className="fixed inset-0 z-[12070] flex w-screen h-screen bg-gradient-to-br from-white via-slate-50 to-blue-50 text-slate-800">
       <section className="flex w-full h-full">
         <div className="m-auto flex flex-col items-center text-center space-y-6 px-6">
           <div

@@ -8318,7 +8318,8 @@ const generateRentalDocumentHandler = async (req, res) => {
     });
   } catch (err) {
     console.error('[rental-documents/generate] error', err);
-    return res.status(500).json({ error: 'PDF generation failed' });
+    const detail = err instanceof Error ? err.message : String(err);
+    return res.status(500).json({ error: `PDF generation failed: ${detail.slice(0, 300)}` });
   }
 };
 
@@ -8442,7 +8443,8 @@ app.post('/api/template-studio/preview', async (req, res) => {
     return res.json({ ok: true, pdfBase64 });
   } catch (err) {
     console.error('[template-studio/preview] error', err);
-    return res.status(500).json({ error: 'PDF preview failed' });
+    const previewDetail = err instanceof Error ? err.message : String(err);
+    return res.status(500).json({ error: `PDF preview failed: ${previewDetail.slice(0, 300)}` });
   }
 });
 
