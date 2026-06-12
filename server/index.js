@@ -3880,19 +3880,56 @@ app.post('/api/system/update/apply', async (req, res) => {
     const force = Boolean(req.body?.force);
     const branch = await detectGitBranch();
 
+    // Generated files: no local value, safe to discard before updating.
+    const AUTO_RESET_FILES = ['package-lock.json'];
+    await runCommand('git', ['checkout', '--', ...AUTO_RESET_FILES]);
+
+    // Per-install runtime state rewritten by the server: preserved around the
+    // pull so an update can never lose it (nor be blocked by it).
+    const RUNTIME_DATA_FILES = [
+      'server/data/database-info.json',
+      'server/data/mail-config.json',
+    ];
+    const runtimeBackups = new Map();
+    for (const relPath of RUNTIME_DATA_FILES) {
+      const absPath = path.join(PROJECT_ROOT, relPath);
+      if (fs.existsSync(absPath)) {
+        try {
+          runtimeBackups.set(relPath, fs.readFileSync(absPath, 'utf-8'));
+          await runCommand('git', ['checkout', '--', relPath]);
+        } catch { /* untracked or unreadable: ignore */ }
+      }
+    }
+    const restoreRuntimeFiles = () => {
+      for (const [relPath, contents] of runtimeBackups) {
+        try {
+          fs.writeFileSync(path.join(PROJECT_ROOT, relPath), contents, 'utf-8');
+        } catch (err) {
+          console.warn(`[update/apply] unable to restore ${relPath}`, err);
+        }
+      }
+    };
+
+    // Untracked files never conflict with a fast-forward pull: only real
+    // modifications to tracked files should block the update.
     const dirtyRes = await runCommand('git', ['status', '--porcelain']);
-    const dirtyFiles = dirtyRes.stdout.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    const dirtyFiles = dirtyRes.stdout
+      .split(/\r?\n/)
+      .filter((line) => line.trim().length > 0 && !line.startsWith('??'))
+      .map((line) => line.trim());
     let stashed = false;
     if (dirtyFiles.length > 0) {
       if (!force) {
+        restoreRuntimeFiles();
         return res.status(409).json({
           ok: false,
           error: 'working_tree_dirty',
           files: dirtyFiles.slice(0, 20).map((line) => line.replace(/^\S+\s+/, '')),
         });
       }
-      const stashRes = await runCommand('git', ['stash', 'push', '--include-untracked', '-m', 'openrig-auto-update']);
+      const stashRes = await runCommand('git', ['stash', 'push', '-m', 'openrig-auto-update']);
       if (stashRes.code !== 0) {
+        restoreRuntimeFiles();
         return res.status(500).json({
           ok: false,
           error: 'stash_failed',
@@ -3906,6 +3943,7 @@ app.post('/api/system/update/apply', async (req, res) => {
     const oldHead = (await runCommand('git', ['rev-parse', 'HEAD'])).stdout.trim();
 
     const pullRes = await runCommand('git', ['pull', '--ff-only', 'origin', branch], { timeout: 5 * 60 * 1000 });
+    restoreRuntimeFiles();
     if (pullRes.code !== 0) {
       return res.status(500).json({
         ok: false,

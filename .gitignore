@@ -30,3 +30,5 @@ server/data/supabase-config-state.json
 server/data/supabase-verification.json
 server/data/supabase-bootstrap.json
 server/data/supabase-credentials.json
+server/data/database-info.json
+server/data/mail-config.json
