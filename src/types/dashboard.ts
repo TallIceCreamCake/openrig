@@ -53,6 +53,8 @@ export interface ClockWidgetOptions {
   colorsLinked?: boolean;
 }
 
+export type UpcomingRentalsSortOrder = 'start_asc' | 'start_desc' | 'client_asc' | 'client_desc';
+
 export interface UpcomingRentalsWidgetOptions {
   showClient?: boolean;
   showDate?: boolean;
@@ -60,6 +62,7 @@ export interface UpcomingRentalsWidgetOptions {
   showEquipmentCount?: boolean;
   showStatus?: boolean;
   limit?: number;
+  sortOrder?: UpcomingRentalsSortOrder;
 }
 
 export interface DashboardWidgetOptions {

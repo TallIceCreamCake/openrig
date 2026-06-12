@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase, toProxiedStorageUrl } from '../lib/supabase';
 
 export interface PersonnelChatParticipant {
   thread_id: string;
@@ -1326,7 +1326,7 @@ export const usePersonnelChat = (currentUserId: string | null | undefined) => {
           file_name: file.name ?? null,
           file_type: file.type ?? null,
           file_size: typeof file.size === 'number' ? Number(file.size) : null,
-          public_url: publicData?.publicUrl ?? null,
+          public_url: toProxiedStorageUrl(publicData?.publicUrl) || null,
         });
       }
       return uploaded;

@@ -58,34 +58,36 @@ const WeatherWidget: React.FC<WeatherWidgetProps> = ({ weather }) => {
 
   return (
     <WidgetCard title={t('dashboard.widgets.weather.title')}>
-      <div className="space-y-4">
-        <div className="text-center">
-          <div className="flex items-center justify-center mb-2">
+      <div className="space-y-3">
+        <div className="rounded-xl border border-sky-100 bg-gradient-to-br from-sky-50/80 to-white p-4 flex items-center gap-4">
+          <div className="h-14 w-14 rounded-2xl bg-white shadow-sm grid place-items-center flex-shrink-0">
             {getWeatherIcon(weather.condition)}
           </div>
-          <p className="text-2xl font-bold text-gray-900">{weather.temperature}°C</p>
-          <p className="text-sm text-gray-600">{getConditionText(weather.condition)}</p>
-          <p className="text-xs text-gray-500">{weather.location}</p>
-        </div>
-        
-        <div className="grid grid-cols-2 gap-3 text-xs">
-          <div className="bg-blue-50 p-2 rounded">
-            <p className="text-blue-600 font-medium">{t('dashboard.widgets.weather.humidity')}</p>
-            <p className="text-blue-900 font-semibold">{weather.humidity}%</p>
-          </div>
-          <div className="bg-gray-50 p-2 rounded">
-            <p className="text-gray-600 font-medium">{t('dashboard.widgets.weather.wind')}</p>
-            <p className="text-gray-900 font-semibold">{weather.windSpeed} km/h</p>
+          <div className="min-w-0">
+            <p className="text-3xl font-bold text-gray-900 tabular-nums leading-none">{weather.temperature}°C</p>
+            <p className="text-sm text-gray-600 mt-1">{getConditionText(weather.condition)}</p>
+            <p className="text-xs text-gray-400 truncate">{weather.location}</p>
           </div>
         </div>
-        
-        <div className="border-t pt-3">
-          <p className="text-xs font-medium text-gray-500 mb-2">{t('dashboard.widgets.weather.forecast')}</p>
-          <div className="grid grid-cols-3 gap-2 text-xs">
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="rounded-xl border border-gray-100 bg-gray-50/60 px-3 py-2.5">
+            <p className="text-xs text-gray-500">{t('dashboard.widgets.weather.humidity')}</p>
+            <p className="text-sm font-semibold text-gray-900 tabular-nums mt-0.5">{weather.humidity}%</p>
+          </div>
+          <div className="rounded-xl border border-gray-100 bg-gray-50/60 px-3 py-2.5">
+            <p className="text-xs text-gray-500">{t('dashboard.widgets.weather.wind')}</p>
+            <p className="text-sm font-semibold text-gray-900 tabular-nums mt-0.5">{weather.windSpeed} km/h</p>
+          </div>
+        </div>
+
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-2">{t('dashboard.widgets.weather.forecast')}</p>
+          <div className="grid grid-cols-3 gap-2">
             {weather.forecast.slice(0, 3).map((day, index) => (
-              <div key={index} className="text-center">
-                <p className="text-gray-600">{day.day}</p>
-                <p className="font-semibold">{day.temp}°</p>
+              <div key={index} className="rounded-xl border border-gray-100 py-2 text-center">
+                <p className="text-xs text-gray-500">{day.day}</p>
+                <p className="text-sm font-semibold text-gray-900 tabular-nums mt-0.5">{day.temp}°</p>
               </div>
             ))}
           </div>

@@ -272,28 +272,28 @@ const StockPlanningWidget: React.FC = () => {
       {/* Header */}
       <div className="flex-shrink-0 mb-4">
         <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center gap-1.5">
             <button
               onClick={handlePreviousWeek}
-              className="p-1 hover:bg-gray-100 rounded"
+              className="rounded-full border border-gray-200 p-1.5 hover:bg-gray-100 transition-colors"
             >
-              <ChevronLeft className="h-4 w-4" />
+              <ChevronLeft className="h-3.5 w-3.5" />
             </button>
-            <span className="text-sm font-medium text-gray-700">
+            <span className="text-sm font-medium text-gray-700 px-1">
               {format(currentWeekStart, 'dd MMM', { locale })} - {format(addDays(currentWeekStart, 4), 'dd MMM yyyy', { locale })}
             </span>
             <button
               onClick={handleNextWeek}
-              className="p-1 hover:bg-gray-100 rounded"
+              className="rounded-full border border-gray-200 p-1.5 hover:bg-gray-100 transition-colors"
             >
-              <ChevronRight className="h-4 w-4" />
+              <ChevronRight className="h-3.5 w-3.5" />
             </button>
           </div>
-          
+
           {config.equipment_lines.length < 6 && (
             <button
               onClick={addEquipmentLine}
-              className="flex items-center space-x-1 px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+              className="flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100 transition-colors"
             >
               <Plus className="h-3 w-3" />
               <span>{t('dashboard.widgets.stockPlanning.add')}</span>
@@ -302,7 +302,7 @@ const StockPlanningWidget: React.FC = () => {
         </div>
 
         {/* Days Header */}
-        <div className="grid grid-cols-6 gap-1 text-xs font-medium text-gray-600">
+        <div className="grid grid-cols-6 gap-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400">
           <div className="text-left">{t('dashboard.widgets.stockPlanning.resources')}</div>
           {weekDays.map((day) => (
             <div key={day.toISOString()} className="text-center">
@@ -368,7 +368,7 @@ const StockPlanningWidget: React.FC = () => {
               return (
                 <div
                   key={dateKey}
-                  className={`relative h-8 flex items-center justify-center text-xs font-semibold rounded ${container}`}
+                  className={`relative h-8 flex items-center justify-center text-xs font-semibold tabular-nums rounded-lg ${container}`}
                   title={t('dashboard.widgets.stockPlanning.tooltip', { value: stockValue })}
                 >
                   {hasTotalMaintenance ? render : stockValue}
@@ -379,12 +379,13 @@ const StockPlanningWidget: React.FC = () => {
         ))}
 
         {config.equipment_lines.length === 0 && (
-          <div className="text-center py-8 text-gray-500">
-            <p className="text-sm">{t('dashboard.widgets.stockPlanning.empty')}</p>
+          <div className="flex flex-col items-center justify-center gap-2 py-8 text-center">
+            <p className="text-sm text-gray-500">{t('dashboard.widgets.stockPlanning.empty')}</p>
             <button
               onClick={addEquipmentLine}
-              className="mt-2 text-blue-600 hover:text-blue-800 text-sm"
+              className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-3 py-1.5 text-sm font-medium text-blue-700 hover:bg-blue-100 transition-colors"
             >
+              <Plus className="h-3.5 w-3.5" />
               {t('dashboard.widgets.stockPlanning.addFirst')}
             </button>
           </div>

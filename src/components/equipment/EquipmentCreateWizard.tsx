@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Info, Euro, ListChecks, Image as ImageIcon, ArrowLeft, ArrowRight, Save, Package } from 'lucide-react';
 import { Equipment } from '../../types/equipment';
 import { useForm } from 'react-hook-form';
@@ -228,6 +228,34 @@ const EquipmentCreateWizard: React.FC<WizardProps> = ({ onSubmit }) => {
     setStep(s => Math.min(s + 1, steps.length - 1));
   };
   const prev = () => setStep(s => Math.max(s - 1, 0));
+
+  // Anti auto-submit guard: when the summary step appears, the "Next" button
+  // is replaced in place by the submit button — the second click of a
+  // double-click (or an Enter keypress) used to land on it and validate the
+  // creation without the user asking anything.
+  const summaryArmedAtRef = useRef(0);
+  useEffect(() => {
+    if (currentStep.id === 'summary') {
+      summaryArmedAtRef.current = Date.now();
+    }
+  }, [currentStep.id]);
+
+  const handleFormSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    // Enter in a field on an intermediate step: go to the next step instead
+    // of validating the whole creation.
+    if (step < steps.length - 1) {
+      event.preventDefault();
+      void next();
+      return;
+    }
+    // Ignore a submission landing less than 400 ms after the summary step
+    // appeared: it is the tail of a double-click on "Next", not a real intent.
+    if (Date.now() - summaryArmedAtRef.current < 400) {
+      event.preventDefault();
+      return;
+    }
+    void submit(event);
+  };
 
   const submit = handleSubmit(async (data) => {
     const trimmedSerials = inventoryCategory === 'series'
@@ -801,7 +829,7 @@ const EquipmentCreateWizard: React.FC<WizardProps> = ({ onSubmit }) => {
   };
 
   return (
-    <form onSubmit={submit} className="bg-white rounded-lg shadow">
+    <form onSubmit={handleFormSubmit} className="bg-white rounded-lg shadow">
       <div className="px-6 pt-5">
         <div className="mb-4">
           <div className="h-2 bg-gray-200 rounded">

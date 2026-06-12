@@ -289,7 +289,7 @@ const MaintenancePage: React.FC = () => {
         </div>
       </header>
 
-      <section className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+      <section className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
           <h2 className="text-sm font-medium text-gray-700">
             Tâches de maintenance <span className="text-gray-400">({filteredTasks.length})</span>

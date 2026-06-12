@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { addDays, startOfWeek, format, parseISO } from 'date-fns';
+import { addDays, startOfWeek, format, parseISO, isToday } from 'date-fns';
 import { fr, enUS } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type { Personnel, PersonnelActivity } from '../../../types/personnel';
@@ -63,7 +63,7 @@ const PersonnelGanttWidget: React.FC<PersonnelGanttWidgetProps> = ({ personnel, 
     return (
       <div
         key={activity.id}
-        className={`absolute top-1 h-7 border shadow-sm rounded px-2 flex items-center text-[11px] leading-tight ${activityColor(activity.type)}`}
+        className={`absolute top-1 h-7 border shadow-sm rounded-lg px-2 flex items-center text-[11px] leading-tight ${activityColor(activity.type)}`}
         style={{ left: `${left}%`, width: `${width}%`, minWidth: '48px' }}
       >
         <span className="truncate" title={`${label}${clientLabel}\n${startLabel} → ${endLabel}`}>
@@ -109,14 +109,17 @@ const PersonnelGanttWidget: React.FC<PersonnelGanttWidgetProps> = ({ personnel, 
         <div className="min-w-[680px]">
           <div className="grid grid-cols-[160px_1fr] border-b border-gray-200 bg-gray-50 text-[11px] font-semibold uppercase text-gray-500">
             <div className="px-3 py-2">{t('dashboard.widgets.personnelGantt.resourceColumn')}</div>
-            <div className="px-3 py-2">
+            <div className="py-2">
               <div className="flex">
                 {timelineDays.map((day, idx) => {
                   const isWeekend = [0, 6].includes(day.getDay());
+                  const today = isToday(day);
                   return (
                     <div
                       key={idx}
-                      className={`flex-1 text-center border-r last:border-r-0 ${isWeekend ? 'bg-gray-100 text-gray-400' : ''}`}
+                      className={`flex-1 text-center border-r last:border-r-0 ${
+                        today ? 'bg-blue-50 text-blue-600' : isWeekend ? 'bg-gray-100 text-gray-400' : ''
+                      }`}
                     >
                       {format(day, DAY_LABEL_FORMAT, { locale })}
                     </div>
@@ -142,18 +145,20 @@ const PersonnelGanttWidget: React.FC<PersonnelGanttWidgetProps> = ({ personnel, 
                     </div>
                     <div className="text-[11px] text-gray-500 truncate">{person.role || '—'}</div>
                   </div>
-                  <div className="relative px-3 py-2">
+                  <div className="relative py-2">
                     <div className="absolute inset-0 flex">
                       {timelineDays.map((day, idx) => (
                         <div
                           key={idx}
-                          className={`flex-1 border-r border-gray-100 ${[0, 6].includes(day.getDay()) ? 'bg-gray-50' : 'bg-white'}`}
+                          className={`flex-1 border-r border-gray-100 ${
+                            isToday(day) ? 'bg-blue-50/50' : [0, 6].includes(day.getDay()) ? 'bg-gray-50' : 'bg-white'
+                          }`}
                         />
                       ))}
                     </div>
                     <div className="relative h-11">
                       {personActivities.length === 0 && (
-                        <div className="absolute inset-0 flex items-center text-[11px] text-gray-400">
+                        <div className="absolute inset-0 flex items-center pl-3 text-[11px] text-gray-400">
                           {t('dashboard.widgets.personnelGantt.noActivity')}
                         </div>
                       )}

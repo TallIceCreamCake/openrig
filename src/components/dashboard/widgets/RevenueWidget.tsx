@@ -24,48 +24,45 @@ const RevenueWidget: React.FC<RevenueWidgetProps> = ({ data }) => {
 
   return (
     <WidgetCard title={t('dashboard.widgets.revenue.title')}>
-      <div className="space-y-4">
-        <div className="grid grid-cols-1 gap-3">
-          <div className="bg-green-50 p-3 rounded-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-green-600">{t('dashboard.widgets.revenue.today')}</p>
-                <p className="text-2xl font-bold text-green-900">{currencyFormatter.format(data.today)}</p>
-              </div>
-              <Euro className="h-8 w-8 text-green-500" />
+      <div className="space-y-3">
+        {/* Hero figure: today's revenue */}
+        <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-emerald-600">{t('dashboard.widgets.revenue.today')}</p>
+              <p className="text-2xl font-bold text-gray-900 tabular-nums mt-1">{currencyFormatter.format(data.today)}</p>
             </div>
-          </div>
-          
-          <div className="bg-blue-50 p-3 rounded-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-blue-600">{t('dashboard.widgets.revenue.thisWeek')}</p>
-                <p className="text-xl font-semibold text-blue-900">{currencyFormatter.format(data.thisWeek)}</p>
-              </div>
-              <Calendar className="h-6 w-6 text-blue-500" />
-            </div>
-          </div>
-          
-          <div className="bg-purple-50 p-3 rounded-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-purple-600">{t('dashboard.widgets.revenue.thisMonth')}</p>
-                <p className="text-xl font-semibold text-purple-900">{currencyFormatter.format(data.thisMonth)}</p>
-              </div>
-              <TrendingUp className="h-6 w-6 text-purple-500" />
+            <div className="h-10 w-10 rounded-xl bg-emerald-100 grid place-items-center">
+              <Euro className="h-5 w-5 text-emerald-600" />
             </div>
           </div>
         </div>
-        
-        <div className="pt-3 border-t">
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-600">{t('dashboard.widgets.revenue.growth')}</span>
-            <span className={`text-sm font-medium ${
-              data.growth >= 0 ? 'text-green-600' : 'text-red-600'
-            }`}>
-              {data.growth >= 0 ? '+' : ''}{data.growth}%
-            </span>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="rounded-xl border border-gray-100 bg-gray-50/60 p-3">
+            <div className="flex items-center gap-2 text-gray-500">
+              <Calendar className="h-3.5 w-3.5" />
+              <p className="text-xs">{t('dashboard.widgets.revenue.thisWeek')}</p>
+            </div>
+            <p className="text-base font-semibold text-gray-900 tabular-nums mt-1.5">{currencyFormatter.format(data.thisWeek)}</p>
           </div>
+
+          <div className="rounded-xl border border-gray-100 bg-gray-50/60 p-3">
+            <div className="flex items-center gap-2 text-gray-500">
+              <TrendingUp className="h-3.5 w-3.5" />
+              <p className="text-xs">{t('dashboard.widgets.revenue.thisMonth')}</p>
+            </div>
+            <p className="text-base font-semibold text-gray-900 tabular-nums mt-1.5">{currencyFormatter.format(data.thisMonth)}</p>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between rounded-xl border border-gray-100 px-3 py-2.5">
+          <span className="text-sm text-gray-600">{t('dashboard.widgets.revenue.growth')}</span>
+          <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+            data.growth >= 0 ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'
+          }`}>
+            {data.growth >= 0 ? '+' : ''}{data.growth}%
+          </span>
         </div>
       </div>
     </WidgetCard>

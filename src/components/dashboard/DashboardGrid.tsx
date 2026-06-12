@@ -196,6 +196,11 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
     limit: typeof widgetOptions?.upcomingRentals?.limit === 'number'
       ? Math.max(3, Math.min(10, Math.round(widgetOptions.upcomingRentals.limit)))
       : DEFAULT_UPCOMING_RENTALS_OPTIONS.limit,
+    sortOrder: (['start_asc', 'start_desc', 'client_asc', 'client_desc'] as const).includes(
+      widgetOptions?.upcomingRentals?.sortOrder as never,
+    )
+      ? widgetOptions!.upcomingRentals!.sortOrder!
+      : ('start_asc' as const),
   };
   const applyUpcomingRentalsOptions = (nextOptions: Record<string, unknown>) => {
     onWidgetOptionsChange?.('upcoming-rentals', nextOptions);
@@ -781,6 +786,21 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
                   <span className="dashboard-card-title-tick h-3.5 w-1 rounded-full flex-shrink-0" aria-hidden="true" />
                   <span className="truncate">{widget.title}</span>
                 </h3>
+                {widget.id === 'upcoming-rentals' && !isEditing && onWidgetOptionsChange && (
+                  <label className="dashboard-widget-action inline-flex items-center gap-1.5 text-xs text-gray-500 flex-shrink-0">
+                    <span className="hidden sm:inline">{t('dashboard.widgets.upcomingRentals.sort.label')}</span>
+                    <select
+                      value={upcomingRentalsOptions.sortOrder}
+                      onChange={(event) => applyUpcomingRentalsOptions({ sortOrder: event.target.value })}
+                      className="h-7 rounded-md border border-gray-200 bg-white px-2 text-xs font-medium text-gray-700 outline-none transition-colors focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
+                    >
+                      <option value="start_asc">{t('dashboard.widgets.upcomingRentals.sort.startAsc')}</option>
+                      <option value="start_desc">{t('dashboard.widgets.upcomingRentals.sort.startDesc')}</option>
+                      <option value="client_asc">{t('dashboard.widgets.upcomingRentals.sort.clientAsc')}</option>
+                      <option value="client_desc">{t('dashboard.widgets.upcomingRentals.sort.clientDesc')}</option>
+                    </select>
+                  </label>
+                )}
                 {isEditing && (
                   <div className="relative flex items-center gap-1 flex-shrink-0">
                     {canConfigure && (

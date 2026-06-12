@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Settings, RotateCcw, ClipboardList, Package, Calendar as CalIcon, Boxes, Users, Building2, Wrench, Plus, Check } from 'lucide-react';
 import Button from '../components/ui/Button';
 import { Link } from 'react-router-dom';
@@ -61,6 +62,7 @@ const UPCOMING_RENTALS_WIDGET_DEFAULT_OPTIONS: Required<UpcomingRentalsWidgetOpt
   showEquipmentCount: true,
   showStatus: true,
   limit: 5,
+  sortOrder: 'start_asc',
 };
 
 const getCalendarLayoutSizing = (days: 1 | 2) => ({
@@ -121,6 +123,10 @@ const resolveUpcomingRentalsWidgetOptions = (
   limit: typeof options?.upcomingRentals?.limit === 'number'
     ? Math.max(3, Math.min(10, Math.round(options.upcomingRentals.limit)))
     : UPCOMING_RENTALS_WIDGET_DEFAULT_OPTIONS.limit,
+  sortOrder: options?.upcomingRentals?.sortOrder
+    && ['start_asc', 'start_desc', 'client_asc', 'client_desc'].includes(options.upcomingRentals.sortOrder)
+    ? options.upcomingRentals.sortOrder
+    : UPCOMING_RENTALS_WIDGET_DEFAULT_OPTIONS.sortOrder,
 });
 
 // Factory to generate available widgets from live data
@@ -662,13 +668,17 @@ const Dashboard = () => {
         onAddWidget={handleAddWidget}
       />
 
-      {isSavingOverlayVisible && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 backdrop-blur-sm">
-          <div className="flex flex-col items-center space-y-3 rounded-lg bg-white/90 px-6 py-5 shadow-xl">
+      {/* Portal + high z-index: rendered in-page, this overlay would sit under
+          the glass topbar/sidebar (backdrop-filter stacking contexts) and the
+          other layered surfaces. */}
+      {isSavingOverlayVisible && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[12030] flex items-center justify-center bg-gray-900/40 backdrop-blur-sm">
+          <div className="flex flex-col items-center space-y-3 rounded-2xl bg-white/95 px-6 py-5 shadow-xl">
             <div className="h-10 w-10 animate-spin rounded-full border-2 border-gray-300 border-t-transparent" />
             <p className="text-sm font-medium text-gray-700">{t('dashboard.savingOverlay')}</p>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

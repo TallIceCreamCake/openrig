@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Plus, X, Truck } from 'lucide-react';
+import { Plus, X, Truck, Car, Search } from 'lucide-react';
 import { useVehicles } from '../hooks/useVehicles';
 import VehicleCreateWizard from '../components/vehicles/VehicleCreateWizard';
 import VehicleTable from '../components/vehicles/VehicleTable';
@@ -34,8 +34,31 @@ const VehiclesPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-gray-900">Véhicules</h1>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3 flex-1">
+          <h1 className="text-2xl font-semibold text-gray-900">Véhicules</h1>
+          {activeTab === 'vehicles' && !showForm && (
+            <div className="relative w-full max-w-xs">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Rechercher (nom/plaque)"
+                className="pl-9 pr-8 py-2 w-full rounded-md border border-gray-300 text-sm focus:border-blue-500 focus:ring-blue-500"
+              />
+              {query && (
+                <button
+                  type="button"
+                  onClick={() => setQuery('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1"
+                  aria-label="Effacer la recherche"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+          )}
+        </div>
         {activeTab === 'vehicles' ? (
           !showForm ? (
             <button onClick={() => setShowForm(true)} className="inline-flex items-center px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700">
@@ -59,10 +82,11 @@ const VehiclesPage: React.FC = () => {
           <button
             type="button"
             onClick={() => setActiveTab('vehicles')}
-            className={`py-3 px-1 border-b-2 text-sm font-medium ${
+            className={`py-3 px-1 border-b-2 text-sm font-medium inline-flex items-center gap-2 ${
               activeTab === 'vehicles' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}
           >
+            <Car className="h-4 w-4" />
             Véhicules
           </button>
           <button
@@ -83,25 +107,10 @@ const VehiclesPage: React.FC = () => {
           showForm ? (
             <VehicleCreateWizard onSubmit={async (data) => { await addVehicle(data); setShowForm(false); }} onCancel={() => setShowForm(false)} />
           ) : (
-            <>
-              <div className="relative max-w-xs">
-                <input
-                  value={query}
-                  onChange={e => setQuery(e.target.value)}
-                  placeholder="Rechercher (nom/plaque)"
-                  className="pl-3 pr-8 py-2 w-full rounded-md border border-gray-300 text-sm focus:border-blue-500 focus:ring-blue-500"
-                />
-                {query && (
-                  <button onClick={() => setQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400">
-                    <X className="h-4 w-4" />
-                  </button>
-                )}
-              </div>
-              <VehicleTable
-                vehicles={filtered}
-                onBulkDelete={deleteVehiclesBulk}
-              />
-            </>
+            <VehicleTable
+              vehicles={filtered}
+              onBulkDelete={deleteVehiclesBulk}
+            />
           )
         ) : (
           <DeliveryOffersPanel createSignal={offerCreateSignal} />

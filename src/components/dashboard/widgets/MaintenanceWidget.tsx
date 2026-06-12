@@ -130,10 +130,6 @@ const MaintenanceWidget: React.FC<MaintenanceWidgetProps> = ({ tasks }) => {
 
   return (
     <div className="h-full flex flex-col p-4">
-      <div className="mb-3 flex items-center gap-2">
-        <h3 className="text-sm font-medium text-gray-700">{t('dashboard.widgets.maintenance.heading')}</h3>
-      </div>
-
       <div className="flex-1 min-h-0 overflow-y-auto space-y-2.5 pr-0.5">
         {visibleTasks.length === 0 ? (
           <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/70 py-6 text-center">

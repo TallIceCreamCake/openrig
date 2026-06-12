@@ -85,13 +85,12 @@ const RecentActivityWidget: React.FC<RecentActivityWidgetProps> = ({ activities 
   const locale = language === 'en' ? enUS : fr;
   return (
     <div className="h-full flex flex-col p-4">
-      <div className="flex-shrink-0 mb-4">
-        <h3 className="text-sm font-medium text-gray-700">{t('dashboard.widgets.recentActivity.heading')}</h3>
-      </div>
-      <div className="flex-1 overflow-y-auto space-y-3">
+      <div className="flex-1 overflow-y-auto space-y-1">
         {activities.length === 0 ? (
-          <div className="text-center py-4">
-            <Activity className="h-8 w-8 text-gray-300 mx-auto mb-2" />
+          <div className="flex flex-col items-center justify-center gap-2 py-6 text-center">
+            <div className="h-10 w-10 rounded-xl bg-gray-100 grid place-items-center">
+              <Activity className="h-5 w-5 text-gray-300" />
+            </div>
             <p className="text-sm text-gray-500">{t('dashboard.widgets.recentActivity.empty')}</p>
           </div>
         ) : (
@@ -99,11 +98,11 @@ const RecentActivityWidget: React.FC<RecentActivityWidgetProps> = ({ activities 
             const Icon = getActivityIcon(activity.type);
             const colorClass = getActivityColor(activity.type);
             const projectAccent = isProjectActivity(activity.type) ? getProjectAccent(activity.color) : null;
-            
+
             const content = (
-              <div className="flex items-start space-x-3 p-2 hover:bg-gray-50 rounded-lg transition-colors">
+              <div className="flex items-start gap-3 p-2.5 hover:bg-gray-50 rounded-xl transition-colors">
                 <div
-                  className={`p-2 rounded-full ${projectAccent ? '' : colorClass}`}
+                  className={`h-9 w-9 flex-shrink-0 rounded-xl grid place-items-center ${projectAccent ? '' : colorClass}`}
                   style={projectAccent ? { backgroundColor: projectAccent.backgroundColor } : undefined}
                 >
                   <Icon
@@ -111,27 +110,29 @@ const RecentActivityWidget: React.FC<RecentActivityWidgetProps> = ({ activities 
                     style={projectAccent ? { color: projectAccent.iconColor } : undefined}
                   />
                 </div>
-                
+
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900">
-                    {activity.title}
-                  </p>
-                  <p className="text-sm text-gray-600 mt-1">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <p className="text-sm font-medium text-gray-900 truncate">
+                      {activity.title}
+                    </p>
+                    <p className="text-[11px] text-gray-400 flex-shrink-0">
+                      {formatDistanceToNow(new Date(activity.timestamp), {
+                        addSuffix: true,
+                        locale
+                      })}
+                    </p>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">
                     {activity.description}
                   </p>
-                  <p className="text-xs text-gray-400 mt-1">
-                    {formatDistanceToNow(new Date(activity.timestamp), { 
-                      addSuffix: true, 
-                      locale 
-                    })}
-                  </p>
                 </div>
-                
+
                 {activity.avatar && (
                   <img
                     src={activity.avatar}
                     alt=""
-                    className="h-8 w-8 rounded-full object-cover"
+                    className="h-8 w-8 rounded-full object-cover ring-1 ring-black/5 flex-shrink-0"
                   />
                 )}
               </div>

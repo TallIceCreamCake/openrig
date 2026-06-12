@@ -240,7 +240,7 @@ const ServiceTable: React.FC<ServiceTableProps> = ({
       : "Aucun service personnel pour l'instant.";
 
   return (
-    <div className="bg-white rounded-lg shadow flex h-full flex-col">
+    <div className="bg-white rounded-xl shadow overflow-hidden flex h-full flex-col">
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
         <p className="text-sm font-medium text-gray-700">{title}</p>
         <div className="relative">

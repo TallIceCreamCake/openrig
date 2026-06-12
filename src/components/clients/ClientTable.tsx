@@ -112,7 +112,7 @@ const ClientTable: React.FC<ClientTableProps> = ({ clients, onBulkDelete, mode =
   }, [hasSelection]);
 
   return (
-    <div className="bg-white rounded-lg shadow">
+    <div className="bg-white rounded-xl shadow overflow-hidden">
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
         <p className="text-sm font-medium text-gray-700">
           {mode === 'companies' ? `Entreprises (${clients.length})` : `Clients (${clients.length})`}

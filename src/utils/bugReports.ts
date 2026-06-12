@@ -1,4 +1,4 @@
-import { supabase } from '../lib/supabase';
+import { supabase, toProxiedStorageUrl } from '../lib/supabase';
 import { Database, Json } from '../lib/database.types';
 
 export type BugReportStatus = 'open' | 'reviewed' | 'resolved';
@@ -166,7 +166,7 @@ export const submitBugReport = async ({
         .insert([{
           bug_report_id: reportRow.id,
           storage_path: storagePath,
-          file_url: publicData?.publicUrl || '',
+          file_url: toProxiedStorageUrl(publicData?.publicUrl) || '',
           file_name: file.name || 'capture',
           file_type: file.type || null,
           file_size: typeof file.size === 'number' ? file.size : null,

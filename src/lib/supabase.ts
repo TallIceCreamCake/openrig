@@ -35,3 +35,29 @@ export const supabase = createClient<Database>(
   SUPABASE_CONFIGURED ? SUPABASE_URL : FALLBACK_URL,
   SUPABASE_CONFIGURED ? supabaseAnonKey : FALLBACK_KEY,
 );
+
+const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '0.0.0.0']);
+
+/**
+ * Storage public URLs built on a local Supabase (or on the current origin via
+ * the /supabase proxy) only work from one machine. Store/display them as a
+ * relative "/supabase/..." path instead so they load from any device.
+ * Non-local URLs (e.g. Supabase cloud) are returned untouched.
+ */
+export const toProxiedStorageUrl = (url: string | null | undefined): string => {
+  if (!url) return '';
+  try {
+    const base = typeof window !== 'undefined' ? window.location.origin : 'http://localhost';
+    const parsed = new URL(url, base);
+    const isLocalHost = LOCAL_HOSTNAMES.has(parsed.hostname);
+    const isSameOrigin = typeof window !== 'undefined' && parsed.origin === window.location.origin;
+    if (!isLocalHost && !isSameOrigin) return url;
+    const pathname = parsed.pathname.startsWith('/supabase/')
+      ? parsed.pathname
+      : `/supabase${parsed.pathname}`;
+    if (!pathname.startsWith('/supabase/storage/v1/')) return url;
+    return `${pathname}${parsed.search}`;
+  } catch {
+    return url;
+  }
+};

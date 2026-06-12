@@ -21,11 +21,6 @@ const QuickStatsWidget: React.FC<QuickStatsWidgetProps> = ({ stats }) => {
     return change > 0 ? TrendingUp : TrendingDown;
   };
 
-  const getTrendColor = (change?: number) => {
-    if (!change) return 'text-gray-400';
-    return change > 0 ? 'text-green-500' : 'text-red-500';
-  };
-
   const { t } = useTranslation();
   return (
     <WidgetCard title={t('dashboard.widgets.quickStats.title')}>
@@ -33,25 +28,26 @@ const QuickStatsWidget: React.FC<QuickStatsWidgetProps> = ({ stats }) => {
         {stats.map((stat, index) => {
           const Icon = stat.icon;
           const TrendIcon = getTrendIcon(stat.change);
-          const trendColor = getTrendColor(stat.change);
-          
+
           return (
-            <div key={index} className="bg-gray-50 p-3 rounded-lg">
-              <div className="flex items-center justify-between mb-2">
-                <Icon className={`h-5 w-5 ${stat.color}`} />
+            <div key={index} className="rounded-xl border border-gray-100 bg-gray-50/60 p-3 transition-colors hover:bg-gray-50">
+              <div className="flex items-center justify-between mb-2.5">
+                <div className="h-8 w-8 rounded-lg bg-white shadow-sm grid place-items-center">
+                  <Icon className={`h-4 w-4 ${stat.color}`} />
+                </div>
                 {stat.change !== undefined && (
-                  <div className="flex items-center space-x-1">
-                    <TrendIcon className={`h-3 w-3 ${trendColor}`} />
-                    <span className={`text-xs font-medium ${trendColor}`}>
-                      {Math.abs(stat.change)}%
-                    </span>
+                  <div className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                    !stat.change ? 'bg-gray-100 text-gray-500' : stat.change > 0 ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'
+                  }`}>
+                    <TrendIcon className="h-3 w-3" />
+                    {Math.abs(stat.change)}%
                   </div>
                 )}
               </div>
-              
+
               <div>
-                <p className="text-lg font-bold text-gray-900">{stat.value}</p>
-                <p className="text-xs text-gray-600">{stat.label}</p>
+                <p className="text-xl font-bold text-gray-900 tabular-nums leading-tight">{stat.value}</p>
+                <p className="text-xs text-gray-500 mt-0.5">{stat.label}</p>
               </div>
             </div>
           );

@@ -694,6 +694,10 @@ const applyStructureEvaluation = (result) => {
     setSupabaseHealth({ status: 'ready', issues: [], message: null });
     writeSupabaseVerificationFlag(true);
     writeSupabaseConfigState(true);
+    // The database is confirmed reachable: fix any stored local storage URLs.
+    normalizeStoredStorageUrls().catch((err) => {
+      console.warn('[storage-urls] normalization failed', err);
+    });
 
     if (previousStatus !== 'ready') {
       writeSupabaseBootstrapMetadata({
@@ -1686,6 +1690,93 @@ const buildDbUrlFromInfo = (info) => {
   const encodedPassword = encodeURIComponent(info.password || '');
   const authPart = encodedPassword ? `${encodedUser}:${encodedPassword}` : encodedUser;
   return `postgresql://${authPart}@${info.host}:${info.port}/${info.database}`;
+};
+
+/* ===== Storage URL normalization =====
+ * Supabase getPublicUrl() returns absolute URLs built on the server's local
+ * Supabase address (http://127.0.0.1:54321/...). Stored as-is, those URLs only
+ * load on the server machine. They are rewritten to the front's /supabase
+ * proxy path so images work from any device.
+ */
+const LOCAL_STORAGE_HOSTNAMES = new Set(['127.0.0.1', 'localhost', '0.0.0.0']);
+
+const toProxiedStorageUrl = (publicUrl) => {
+  try {
+    const parsed = new URL(publicUrl);
+    if (!LOCAL_STORAGE_HOSTNAMES.has(parsed.hostname)) return publicUrl;
+    return `/supabase${parsed.pathname}${parsed.search}`;
+  } catch {
+    return publicUrl;
+  }
+};
+
+// One-time cleanup of previously stored local URLs, run after the database is
+// confirmed reachable. Each statement is independent: a missing table on an
+// older install must not stop the others.
+const LOCAL_URL_SQL_PREFIX = '^https?://(127\\.0\\.0\\.1|localhost|0\\.0\\.0\\.0)(:[0-9]+)?/(supabase/)?';
+const LOCAL_STORAGE_SQL_FILTER = '^https?://(127\\.0\\.0\\.1|localhost|0\\.0\\.0\\.0)(:[0-9]+)?/(supabase/)?storage/v1/';
+let storageUrlNormalizationDone = false;
+
+const normalizeStoredStorageUrls = async () => {
+  if (storageUrlNormalizationDone) return;
+  storageUrlNormalizationDone = true;
+
+  const dbUrl = buildDbUrlFromInfo(readDatabaseInfo());
+  if (!dbUrl) return;
+
+  const simpleColumns = [
+    ['public.equipment', 'image_url'],
+    ['public.clients', 'image_url'],
+    ['public.app_users', 'avatar_url'],
+    ['public.standalone_crew_profiles', 'avatar_url'],
+    ['public.rental_tasks', 'image_url'],
+  ];
+
+  const client = new PgClient({ connectionString: dbUrl });
+  try {
+    await client.connect();
+  } catch (err) {
+    storageUrlNormalizationDone = false;
+    console.warn('[storage-urls] normalization skipped (db unreachable)', err.message || err);
+    return;
+  }
+
+  try {
+    for (const [table, column] of simpleColumns) {
+      try {
+        const result = await client.query(
+          `UPDATE ${table} SET ${column} = regexp_replace(${column}, $1, '/supabase/') WHERE ${column} ~ $2`,
+          [LOCAL_URL_SQL_PREFIX, LOCAL_STORAGE_SQL_FILTER],
+        );
+        if (result.rowCount > 0) {
+          console.info(`[storage-urls] ${table}.${column}: ${result.rowCount} URL(s) locales réécrites vers /supabase`);
+        }
+      } catch (err) {
+        console.warn(`[storage-urls] ${table}.${column} skipped`, err.message || err);
+      }
+    }
+
+    try {
+      const result = await client.query(
+        `UPDATE public.equipment_accessories
+         SET image_urls = (
+           SELECT coalesce(array_agg(regexp_replace(u, $1, '/supabase/')), '{}')
+           FROM unnest(image_urls) AS u
+         )
+         WHERE EXISTS (
+           SELECT 1 FROM unnest(image_urls) AS u WHERE u ~ $2
+         )`,
+        [LOCAL_URL_SQL_PREFIX, LOCAL_STORAGE_SQL_FILTER],
+      );
+      if (result.rowCount > 0) {
+        console.info(`[storage-urls] equipment_accessories.image_urls: ${result.rowCount} ligne(s) réécrites`);
+      }
+    } catch (err) {
+      console.warn('[storage-urls] equipment_accessories skipped', err.message || err);
+    }
+  } finally {
+    await client.end().catch(() => {});
+  }
 };
 
 const runSupabaseDbDump = async ({ outputFile, dataOnly = false, dbUrl = null }) => {
@@ -3302,26 +3393,39 @@ app.get('/api/system/company-logo-data', async (req, res) => {
   }
 });
 
-const isAllowedPublicImageUrl = (value) => {
-  if (typeof value !== 'string' || !value.trim()) return false;
+// Accepts the historical absolute local URLs and the new front-proxied
+// "/supabase/storage/..." paths, and resolves both against the Supabase
+// instance the server is connected to. Anything else is rejected.
+const resolvePublicImageFetchUrl = (value) => {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  const trimmed = value.trim();
+  const supabaseOrigin = (supabaseConfig.supabaseUrl || 'http://127.0.0.1:54321').replace(/\/$/, '');
+
+  if (trimmed.startsWith('/supabase/storage/v1/object/public/')) {
+    return `${supabaseOrigin}${trimmed.slice('/supabase'.length)}`;
+  }
+
   try {
-    const parsed = new URL(value);
-    const hostAllowed = parsed.hostname === '127.0.0.1' || parsed.hostname === 'localhost';
-    const portAllowed = parsed.port === '54321' || parsed.port === '';
-    const pathAllowed = parsed.pathname.startsWith('/storage/v1/object/public/');
-    return parsed.protocol === 'http:' && hostAllowed && portAllowed && pathAllowed;
+    const parsed = new URL(trimmed);
+    if (!LOCAL_STORAGE_HOSTNAMES.has(parsed.hostname)) return null;
+    const pathname = parsed.pathname.startsWith('/supabase/')
+      ? parsed.pathname.slice('/supabase'.length)
+      : parsed.pathname;
+    if (!pathname.startsWith('/storage/v1/object/public/')) return null;
+    return `${supabaseOrigin}${pathname}${parsed.search}`;
   } catch {
-    return false;
+    return null;
   }
 };
 
 app.get('/api/system/public-image-data', async (req, res) => {
   const url = typeof req.query.url === 'string' ? req.query.url : '';
-  if (!isAllowedPublicImageUrl(url)) {
+  const fetchUrl = resolvePublicImageFetchUrl(url);
+  if (!fetchUrl) {
     return res.status(400).json({ ok: false, error: 'invalid_url' });
   }
   try {
-    const response = await fetch(url);
+    const response = await fetch(fetchUrl);
     if (!response.ok) {
       return res.status(502).json({ ok: false, error: 'image_fetch_failed' });
     }
@@ -5421,7 +5525,7 @@ app.post('/api/profile/avatar', async (req, res) => {
     }
 
     const { data: publicUrlData } = supabase.storage.from('avatars').getPublicUrl(filePath);
-    const publicUrl = publicUrlData?.publicUrl;
+    const publicUrl = publicUrlData?.publicUrl ? toProxiedStorageUrl(publicUrlData.publicUrl) : null;
     if (!publicUrl) {
       return res.status(500).json({ error: 'URL publique indisponible' });
     }
@@ -5485,7 +5589,9 @@ app.post('/api/equipment/image', async (req, res) => {
       return res.status(500).json({ error: 'URL publique indisponible' });
     }
 
-    return res.json({ ok: true, url: publicUrl });
+    // A local Supabase URL only works on the server machine: store the
+    // front-proxied path instead so the image loads from any device.
+    return res.json({ ok: true, url: toProxiedStorageUrl(publicUrl) });
   } catch (err) {
     console.error('[equipment/image] unexpected error', err);
     const message = err instanceof Error ? err.message : 'Erreur inattendue';

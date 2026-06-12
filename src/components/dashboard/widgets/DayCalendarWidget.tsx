@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { addDays, differenceInMinutes, isSameDay, startOfDay, endOfDay } from 'date-fns';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { CalendarEvent } from '../../../types/calendar';
 import { useTranslation } from '../../../context/TranslationContext';
 import CalendarEventCard from '../../calendar/CalendarEventCard';
@@ -134,7 +135,7 @@ const DayCalendarWidget: React.FC<DayCalendarWidgetProps> = ({ events, options }
           <button
             type="button"
             onClick={() => setDayOffset(0)}
-            className={`inline-flex h-7 items-center rounded-md border px-2 text-xs font-medium transition-colors ${
+            className={`inline-flex h-7 items-center rounded-full border px-2.5 text-xs font-medium transition-colors ${
               dayOffset === 0
                 ? 'border-blue-200 bg-blue-50 text-blue-700'
                 : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
@@ -145,18 +146,18 @@ const DayCalendarWidget: React.FC<DayCalendarWidgetProps> = ({ events, options }
           <button
             type="button"
             onClick={() => setDayOffset((previous) => previous - 1)}
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-gray-200 bg-white text-xs font-semibold text-gray-700 transition-colors hover:bg-gray-50"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 transition-colors hover:bg-gray-50"
             aria-label="Previous period"
           >
-            {'<'}
+            <ChevronLeft className="h-3.5 w-3.5" />
           </button>
           <button
             type="button"
             onClick={() => setDayOffset((previous) => previous + 1)}
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-gray-200 bg-white text-xs font-semibold text-gray-700 transition-colors hover:bg-gray-50"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 transition-colors hover:bg-gray-50"
             aria-label="Next period"
           >
-            {'>'}
+            <ChevronRight className="h-3.5 w-3.5" />
           </button>
         </div>
       </div>

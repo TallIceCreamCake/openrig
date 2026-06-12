@@ -148,7 +148,7 @@ const BillingPage: React.FC = () => {
       )}
 
       <div className="space-y-8">
-        <section className="bg-white rounded-lg border border-gray-200 shadow-sm">
+        <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
           <header className="px-4 py-4 border-b border-gray-100 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="text-lg font-semibold text-gray-900">Factures</h2>
@@ -217,7 +217,7 @@ const BillingPage: React.FC = () => {
           </div>
         </section>
 
-        <section className="bg-white rounded-lg border border-gray-200 shadow-sm">
+        <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
           <header className="px-4 py-4 border-b border-gray-100 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="text-lg font-semibold text-gray-900">Devis</h2>

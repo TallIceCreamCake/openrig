@@ -307,7 +307,7 @@ const RentalsTable: React.FC<RentalsTableProps> = ({
   };
 
   return (
-    <div className="bg-white rounded-lg shadow overflow-hidden">
+    <div className="bg-white rounded-xl shadow overflow-hidden">
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
         <p className="text-sm font-medium text-gray-700">{t('rentals.table.title', { count: rentals.length })}</p>
         <div className="relative">

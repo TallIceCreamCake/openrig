@@ -1,10 +1,12 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { ClipboardList, Clock, MapPin, User } from 'lucide-react';
 import { format, parseISO, isToday, isTomorrow } from 'date-fns';
 import { fr, enUS } from 'date-fns/locale';
 import { useTranslation } from '../../../context/TranslationContext';
-import { UpcomingRentalsWidgetOptions } from '../../../types/dashboard';
+import { UpcomingRentalsSortOrder, UpcomingRentalsWidgetOptions } from '../../../types/dashboard';
+
+const VALID_SORT_ORDERS: readonly UpcomingRentalsSortOrder[] = ['start_asc', 'start_desc', 'client_asc', 'client_desc'];
 
 interface UpcomingRental {
   id: string;
@@ -31,6 +33,7 @@ const DEFAULT_OPTIONS: Required<UpcomingRentalsWidgetOptions> = {
   showEquipmentCount: true,
   showStatus: true,
   limit: 5,
+  sortOrder: 'start_asc',
 };
 
 const DEFAULT_RENTAL_COLOR = '#9CA3AF';
@@ -63,7 +66,6 @@ const getRentalAccentColors = (inputColor?: string) => {
 const UpcomingRentalsWidget: React.FC<UpcomingRentalsWidgetProps> = ({ rentals, options }) => {
   const { t, language } = useTranslation();
   const locale = language === 'en' ? enUS : fr;
-  const [sortOrder, setSortOrder] = useState<'start_asc' | 'start_desc' | 'client_asc' | 'client_desc'>('start_asc');
   const resolvedOptions = useMemo(
     () => ({
       ...DEFAULT_OPTIONS,
@@ -71,9 +73,13 @@ const UpcomingRentalsWidget: React.FC<UpcomingRentalsWidgetProps> = ({ rentals, 
       limit: typeof options?.limit === 'number'
         ? Math.max(3, Math.min(10, Math.round(options.limit)))
         : DEFAULT_OPTIONS.limit,
+      sortOrder: options?.sortOrder && VALID_SORT_ORDERS.includes(options.sortOrder)
+        ? options.sortOrder
+        : DEFAULT_OPTIONS.sortOrder,
     }),
     [options],
   );
+  const sortOrder = resolvedOptions.sortOrder;
 
   const getDateLabel = (dateString: string) => {
     const date = parseISO(dateString);
@@ -104,27 +110,12 @@ const UpcomingRentalsWidget: React.FC<UpcomingRentalsWidgetProps> = ({ rentals, 
 
   return (
     <div className="h-full flex flex-col p-4">
-      <div className="mb-4 flex flex-shrink-0 items-center justify-between gap-2">
-        <h3 className="text-sm font-medium text-gray-700">{t('dashboard.widgets.upcomingRentals.heading')}</h3>
-        <label className="inline-flex items-center gap-1.5 text-xs text-gray-500">
-          <span>{t('dashboard.widgets.upcomingRentals.sort.label')}</span>
-          <select
-            value={sortOrder}
-            onChange={(event) => setSortOrder(event.target.value as 'start_asc' | 'start_desc' | 'client_asc' | 'client_desc')}
-            className="h-7 rounded-md border border-gray-200 bg-white px-2 text-xs font-medium text-gray-700 outline-none transition-colors focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
-          >
-            <option value="start_asc">{t('dashboard.widgets.upcomingRentals.sort.startAsc')}</option>
-            <option value="start_desc">{t('dashboard.widgets.upcomingRentals.sort.startDesc')}</option>
-            <option value="client_asc">{t('dashboard.widgets.upcomingRentals.sort.clientAsc')}</option>
-            <option value="client_desc">{t('dashboard.widgets.upcomingRentals.sort.clientDesc')}</option>
-          </select>
-        </label>
-      </div>
-
-      <div className="flex-1 overflow-y-auto space-y-3">
+      <div className="flex-1 overflow-y-auto space-y-2">
         {sortedRentals.length === 0 ? (
-          <div className="text-center py-4">
-            <ClipboardList className="h-8 w-8 text-gray-300 mx-auto mb-2" />
+          <div className="flex flex-col items-center justify-center gap-2 py-6 text-center">
+            <div className="h-10 w-10 rounded-xl bg-gray-100 grid place-items-center">
+              <ClipboardList className="h-5 w-5 text-gray-300" />
+            </div>
             <p className="text-sm text-gray-500">{t('dashboard.widgets.upcomingRentals.empty')}</p>
           </div>
         ) : (
@@ -134,7 +125,7 @@ const UpcomingRentalsWidget: React.FC<UpcomingRentalsWidgetProps> = ({ rentals, 
               <Link
                 key={rental.id}
                 to={`/rentals/${rental.id}`}
-                className="relative block rounded-r-lg rounded-l-sm border border-gray-100 p-3 pl-4 transition-colors hover:bg-gray-50"
+                className="relative block overflow-hidden rounded-xl border border-gray-100 p-3 pl-4 transition-all hover:bg-gray-50 hover:shadow-sm"
               >
                 <span
                   aria-hidden="true"
@@ -167,10 +158,10 @@ const UpcomingRentalsWidget: React.FC<UpcomingRentalsWidgetProps> = ({ rentals, 
                         {rental.project_name}
                       </p>
                       {resolvedOptions.showStatus && (
-                        <span className={`px-2 py-1 text-xs rounded-full ${
+                        <span className={`px-2 py-0.5 text-[11px] font-medium rounded-full ${
                           rental.status === 'confirmed'
-                            ? 'bg-green-100 text-green-800'
-                            : 'bg-yellow-100 text-yellow-800'
+                            ? 'bg-emerald-50 text-emerald-700'
+                            : 'bg-amber-50 text-amber-700'
                         }`}>
                           {rental.status === 'confirmed'
                             ? t('dashboard.widgets.upcomingRentals.status.confirmed')
@@ -219,10 +210,10 @@ const UpcomingRentalsWidget: React.FC<UpcomingRentalsWidgetProps> = ({ rentals, 
         )}
 
         {rentals.length > resolvedOptions.limit && (
-          <div className="pt-2 border-t">
+          <div className="pt-2 mt-1 border-t border-gray-100">
             <Link
               to="/rentals"
-              className="flex items-center justify-center space-x-1 text-sm text-blue-600 hover:text-blue-800"
+              className="flex items-center justify-center gap-1.5 rounded-lg py-1.5 text-sm font-medium text-blue-600 hover:bg-blue-50 transition-colors"
             >
               <ClipboardList className="h-4 w-4" />
               <span>{t('dashboard.widgets.upcomingRentals.viewAll')}</span>

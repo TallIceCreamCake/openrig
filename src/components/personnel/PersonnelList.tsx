@@ -100,7 +100,7 @@ const PersonnelList: React.FC<PersonnelListProps> = ({ personnel, onBulkDelete }
   }, [personnel]);
 
   return (
-    <div className="bg-white shadow rounded-lg overflow-hidden">
+    <div className="bg-white shadow rounded-xl overflow-hidden">
       <div className="px-4 py-3 border-b border-gray-200 flex justify-between items-center">
         <h3 className="text-lg font-medium text-gray-900">Liste du Personnel ({personnel.length})</h3>
         <Button

@@ -114,7 +114,7 @@ const WarehouseTable: React.FC<WarehouseTableProps> = ({ warehouses, stockCounts
       : t('warehouses.common.itemCount.other', { count });
 
   return (
-    <div className="bg-white rounded-lg shadow">
+    <div className="bg-white rounded-xl shadow overflow-hidden">
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
         <p className="text-sm font-medium text-gray-700">
           {t('warehouses.table.title', { count: warehouses.length })}

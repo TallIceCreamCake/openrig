@@ -137,7 +137,7 @@ const ClockDateWidget: React.FC<ClockDateWidgetProps> = ({ options }) => {
             {dateText}
           </p>
         )}
-        <p className="font-semibold tracking-tight" style={{ fontSize: `${timeFontSize}px`, color: resolvedTimeColor }}>
+        <p className="font-semibold tracking-tight tabular-nums" style={{ fontSize: `${timeFontSize}px`, color: resolvedTimeColor }}>
           {timeText}
         </p>
         {resolvedOptions.datePosition === 'bottom' && (

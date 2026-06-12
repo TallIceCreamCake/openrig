@@ -30,26 +30,29 @@ const PendingRentalsWidget: React.FC<PendingRentalsWidgetProps> = ({ rentals }) 
 
   return (
     <WidgetCard title={t('dashboard.widgets.pendingRentals.title')}>
-      <div className="space-y-2">
+      <div className="space-y-1.5">
         {pendingRentals.length === 0 ? (
-          <p className="text-sm text-gray-500">{t('dashboard.widgets.pendingRentals.empty')}</p>
+          <div className="flex flex-col items-center justify-center gap-2 py-6 text-center">
+            <div className="h-10 w-10 rounded-xl bg-gray-100 grid place-items-center">
+              <span className="text-base">✓</span>
+            </div>
+            <p className="text-sm text-gray-500">{t('dashboard.widgets.pendingRentals.empty')}</p>
+          </div>
         ) : (
           pendingRentals.map((rental) => (
             <Link
               key={rental.id}
               to={`/rentals/${rental.id}`}
-              className="block p-2 hover:bg-gray-50 rounded-md"
+              className="flex justify-between items-center gap-3 p-2.5 rounded-xl hover:bg-gray-50 transition-colors"
             >
-              <div className="flex justify-between items-start">
-                <div>
-                  <div className="font-medium text-sm">{rental.client_name}</div>
-                  <div className="text-xs text-gray-500">
-                    {formatDate(rental.start_date)}
-                  </div>
+              <div className="min-w-0">
+                <div className="font-medium text-sm text-gray-900 truncate">{rental.client_name}</div>
+                <div className="text-xs text-gray-500">
+                  {formatDate(rental.start_date)}
                 </div>
-                <div className="text-sm font-medium">
-                  {currencyFormatter.format(Number(rental.total_price || 0))}
-                </div>
+              </div>
+              <div className="text-sm font-semibold text-gray-900 tabular-nums flex-shrink-0">
+                {currencyFormatter.format(Number(rental.total_price || 0))}
               </div>
             </Link>
           ))

@@ -158,14 +158,11 @@ const UserTasksWidget: React.FC = () => {
   return (
     <div className="flex h-full flex-col p-4">
       <div className="mb-3 flex items-center justify-between">
-        <div>
-          <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Mes tâches</h3>
-          {!loading && (
-            <p className="text-xs text-slate-400">
-              {pending.length} en cours{done.length > 0 ? ` · ${done.length} terminée${done.length > 1 ? 's' : ''}` : ''}
-            </p>
-          )}
-        </div>
+        {!loading ? (
+          <p className="text-xs text-slate-400">
+            {pending.length} en cours{done.length > 0 ? ` · ${done.length} terminée${done.length > 1 ? 's' : ''}` : ''}
+          </p>
+        ) : <span />}
         <button
           type="button"
           onClick={load}
@@ -187,8 +184,10 @@ const UserTasksWidget: React.FC = () => {
           <button type="button" onClick={load} className="mt-1 text-xs text-blue-500 underline">Réessayer</button>
         </div>
       ) : items.length === 0 ? (
-        <div className="flex flex-1 flex-col items-center justify-center gap-1 text-center">
-          <Check className="h-8 w-8 text-green-400" />
+        <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center">
+          <div className="h-10 w-10 rounded-xl bg-emerald-50 grid place-items-center">
+            <Check className="h-5 w-5 text-emerald-400" />
+          </div>
           <p className="text-sm font-medium text-slate-600 dark:text-slate-300">Aucune tâche assignée</p>
           <p className="text-xs text-slate-400">Tu n&apos;as pas de tâches pour l&apos;instant.</p>
         </div>
@@ -222,7 +221,7 @@ const TaskRow: React.FC<{
   const checkColor = item.base_color || '#2563eb';
 
   return (
-    <div className={`group flex items-start gap-2 rounded-lg border p-2 transition-colors ${
+    <div className={`group flex items-start gap-2 rounded-xl border p-2.5 transition-colors ${
       item.is_completed
         ? 'border-slate-100 bg-slate-50/60 dark:border-slate-700 dark:bg-slate-800/40'
         : 'border-slate-200 bg-white hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-750'
