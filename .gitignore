@@ -32,3 +32,6 @@ server/data/supabase-bootstrap.json
 server/data/supabase-credentials.json
 server/data/database-info.json
 server/data/mail-config.json
+
+# Claude memory
+memory/openrig-roadmap.md

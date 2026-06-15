@@ -8448,6 +8448,365 @@ app.post('/api/template-studio/preview', async (req, res) => {
   }
 });
 
+// ── Invoice PDF via Template Studio ──────────────────────────────────────────
+app.get('/api/invoices/:id/pdf', async (req, res) => {
+  try {
+    if (!supabase) return res.status(500).json({ error: 'Supabase indisponible' });
+    const invoiceId = req.params.id;
+    if (!UUID_REGEX.test(invoiceId)) return res.status(400).json({ error: 'ID invalide' });
+
+    const { data: inv, error: invErr } = await supabase
+      .from('invoices')
+      .select('*, clients(id,name,company,email,address,phone)')
+      .eq('id', invoiceId)
+      .maybeSingle();
+    if (invErr || !inv) return res.status(404).json({ error: 'Facture introuvable' });
+
+    const { data: company } = await supabase.from('company_settings').select('*').eq('id', 1).maybeSingle();
+
+    let rental = null;
+    if (inv.rental_id) {
+      const { data: r } = await supabase
+        .from('rentals')
+        .select('*')
+        .eq('id', inv.rental_id)
+        .maybeSingle();
+      rental = r;
+    }
+
+    let lineItems = [];
+    const { data: lines } = await supabase
+      .from('invoice_line_items')
+      .select('*')
+      .eq('invoice_id', invoiceId)
+      .order('line_order', { ascending: true });
+    lineItems = lines || [];
+
+    let studioTemplate = null;
+    if (rental?.id) {
+      const { data: docs } = await supabase
+        .from('rental_documents')
+        .select('id,file_url')
+        .eq('rental_id', rental.id)
+        .order('created_at', { ascending: false })
+        .limit(1);
+      if (docs && docs[0]) {
+        const { data: ts } = await supabase
+          .from('document_templates')
+          .select('*')
+          .order('updated_at', { ascending: false })
+          .limit(1);
+        studioTemplate = ts?.[0] || null;
+      }
+    } else {
+      const { data: ts } = await supabase
+        .from('document_templates')
+        .select('*')
+        .order('updated_at', { ascending: false })
+        .limit(1);
+      studioTemplate = ts?.[0] || null;
+    }
+
+    const client = inv.clients || null;
+    const companyObj = company ? {
+      name: company.name,
+      legalName: company.legal_name || company.name,
+      address: company.address,
+      phone: company.phone,
+      email: company.email,
+      siret: company.siret,
+      vat_number: company.vat_number,
+      logo_url: company.logo_url,
+    } : {};
+
+    const rentalMock = rental || {
+      id: inv.rental_id || inv.id,
+      reference_code: inv.invoice_number,
+      title: inv.notes || `Facture ${inv.invoice_number}`,
+      status: inv.status,
+      start_date: inv.issue_date,
+      end_date: inv.due_date,
+      client_name: client?.name || client?.company || '',
+      items: lineItems.map((l, i) => ({
+        id: l.id,
+        equipment_name: l.description,
+        quantity: l.quantity,
+        price_per_day: l.unit_price_ttc,
+        position: i,
+      })),
+      personnel_services: [],
+      insurance_services: [],
+      other_services: [],
+      maintenance_charges: [],
+    };
+
+    const docType = inv.document_type === 'quote' ? 'devis' : 'facture';
+    const docDesign = studioTemplate?.document_design || null;
+    const editorHtml = studioTemplate?.content || '';
+
+    const buildResult = buildRentalDocumentHtml({
+      rental: rentalMock,
+      docType,
+      documentDesign: docDesign,
+      editorHtml,
+      payments: [],
+      company: companyObj,
+      client: client ? {
+        name: client.name,
+        company: client.company,
+        email: client.email,
+        phone: client.phone,
+        address: client.address,
+      } : null,
+      deliveryDate: null,
+      packItemsByEquipmentId: {},
+      equipmentCoefficient: null,
+      customCss: studioTemplate?.customCss || '',
+      baseUrl: APP_BASE_URL,
+      studioTemplate: studioTemplate ? {
+        blocks: studioTemplate.blocks || [],
+        customCss: studioTemplate.customCss || '',
+      } : null,
+    });
+
+    const html = typeof buildResult === 'string' ? buildResult : (buildResult?.html || '');
+    const pdfOpts = (buildResult && typeof buildResult === 'object' && buildResult.pdfOptions) ? buildResult.pdfOptions : {};
+    const pdfBuffer = await renderPdfFromHtml(html, { format: 'A4', media: 'print', ...pdfOpts });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${inv.invoice_number || invoiceId}.pdf"`);
+    res.send(Buffer.from(pdfBuffer));
+  } catch (err) {
+    console.error('[invoices/pdf]', err);
+    res.status(500).json({ error: err instanceof Error ? err.message : 'PDF generation failed' });
+  }
+});
+
+// ── Invoice reminder email ────────────────────────────────────────────────────
+app.post('/api/invoices/:id/send-reminder', async (req, res) => {
+  try {
+    if (!supabase) return res.status(500).json({ error: 'Supabase indisponible' });
+    const invoiceId = req.params.id;
+    if (!UUID_REGEX.test(invoiceId)) return res.status(400).json({ error: 'ID invalide' });
+
+    const { recipient } = req.body || {};
+    if (!recipient || !EMAIL_REGEX.test(recipient)) {
+      return res.status(400).json({ error: 'Adresse email invalide' });
+    }
+
+    const { data: inv, error: invErr } = await supabase
+      .from('invoices')
+      .select('*, clients(name,company,email)')
+      .eq('id', invoiceId)
+      .maybeSingle();
+    if (invErr || !inv) return res.status(404).json({ error: 'Facture introuvable' });
+
+    const { data: company } = await supabase.from('company_settings').select('*').eq('id', 1).maybeSingle();
+    const companyName = company?.name || 'OpenRig';
+
+    let pdfBuffer = null;
+    try {
+      const pdfRes = await fetch(`http://localhost:${process.env.PORT || 3001}/api/invoices/${invoiceId}/pdf`);
+      if (pdfRes.ok) {
+        const arrayBuf = await pdfRes.arrayBuffer();
+        pdfBuffer = Buffer.from(arrayBuf);
+      }
+    } catch (pdfErr) {
+      console.warn('[invoices/send-reminder] PDF generation failed, sending without attachment', pdfErr?.message);
+    }
+
+    const clientName = inv.clients?.name || inv.clients?.company || 'Client';
+    const invoiceNumber = inv.invoice_number || invoiceId.slice(0, 8);
+    const balanceDue = Number(inv.balance_due ?? (inv.amount_ttc - (inv.paid_amount || 0))).toFixed(2);
+    const dueDate = inv.due_date ? new Date(inv.due_date).toLocaleDateString('fr-FR') : null;
+
+    const mailConfig = readMailConfig({ includeSecrets: true });
+    const transporter = buildTransporter(mailConfig);
+    const fromAddress = mailConfig.user || RESET_MAIL_SENDER;
+
+    const attachments = pdfBuffer
+      ? [{ filename: `${invoiceNumber}.pdf`, content: pdfBuffer, contentType: 'application/pdf' }]
+      : [];
+
+    await transporter.sendMail({
+      from: `"${companyName}" <${fromAddress}>`,
+      to: recipient,
+      subject: `Relance – Facture ${invoiceNumber}`,
+      html: `
+        <p>Bonjour ${clientName},</p>
+        <p>Nous vous contactons au sujet de la facture <strong>${invoiceNumber}</strong>
+           d'un montant de <strong>${Number(inv.amount_ttc).toFixed(2)} €</strong>.</p>
+        ${dueDate ? `<p>Date d'échéance : <strong>${dueDate}</strong>.</p>` : ''}
+        ${balanceDue !== '0.00' ? `<p>Solde restant dû : <strong>${balanceDue} €</strong>.</p>` : ''}
+        <p>Vous trouverez la facture en pièce jointe.</p>
+        <p>Merci de procéder au règlement dans les meilleurs délais.</p>
+        <p>Cordialement,<br>${companyName}</p>
+      `,
+      attachments,
+    });
+
+    await supabase.from('invoice_reminders').insert([{
+      invoice_id: invoiceId,
+      reminder_type: 'custom',
+      channel: 'email',
+      status: 'sent',
+      sent_at: new Date().toISOString(),
+      recipient,
+      subject: `Relance – Facture ${invoiceNumber}`,
+    }]);
+
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error('[invoices/send-reminder]', err);
+    return res.status(500).json({ error: err instanceof Error ? err.message : 'Erreur envoi email' });
+  }
+});
+
+// ── Generic invoice PDFs (balance / schedule / proof) ────────────────────────
+app.get('/api/invoices/:id/pdf-generic', async (req, res) => {
+  try {
+    if (!supabase) return res.status(500).json({ error: 'Supabase indisponible' });
+    const invoiceId = req.params.id;
+    const type = req.query.type || 'balance';
+    if (!UUID_REGEX.test(invoiceId)) return res.status(400).json({ error: 'ID invalide' });
+
+    const { data: inv } = await supabase
+      .from('invoices')
+      .select('*, clients(name,company,address,email,phone)')
+      .eq('id', invoiceId)
+      .maybeSingle();
+    if (!inv) return res.status(404).json({ error: 'Facture introuvable' });
+
+    const { data: company } = await supabase.from('company_settings').select('name,address,siret,logo_url').eq('id', 1).maybeSingle();
+
+    let paymentsQ = supabase.from('payments').select('*').order('payment_date', { ascending: true });
+    if (inv.rental_id) {
+      paymentsQ = paymentsQ.or(`invoice_id.eq.${invoiceId},rental_id.eq.${inv.rental_id}`);
+    } else {
+      paymentsQ = paymentsQ.eq('invoice_id', invoiceId);
+    }
+    const { data: payments } = await paymentsQ;
+
+    const { data: schedule } = await supabase
+      .from('invoice_payment_schedules')
+      .select('*')
+      .eq('invoice_id', invoiceId)
+      .order('installment_no', { ascending: true });
+
+    const fmt = (v) => Number(v || 0).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' });
+    const fmtD = (s) => s ? new Date(s).toLocaleDateString('fr-FR') : '—';
+
+    const totalPaid = (payments || [])
+      .filter((p) => p.status !== 'failed' && p.payment_type !== 'refund')
+      .reduce((s, p) => s + Number(p.amount || 0), 0);
+    const balance = Math.max(0, Number(inv.amount_ttc || 0) - totalPaid);
+
+    const companyName = company?.name || 'OpenRig';
+    const clientName = inv.clients?.name || inv.clients?.company || 'Client';
+    const invoiceNumber = inv.invoice_number || invoiceId.slice(0, 8);
+    const genDate = new Date().toLocaleDateString('fr-FR');
+
+    const STATUS_LABELS = { pending: 'En attente', partially_paid: 'Partiel', paid: 'Payé', overdue: 'En retard', cancelled: 'Annulé' };
+
+    const PAY_METHOD_ROW = (p) => `
+      <tr>
+        <td>${fmtD(p.payment_date)}</td>
+        <td>${p.payment_method || '—'}</td>
+        <td>${p.reference || '—'}</td>
+        <td style="text-align:right;font-weight:600">${fmt(Math.abs(p.amount))}</td>
+      </tr>`;
+
+    let bodyHtml = '';
+    let docTitle = '';
+
+    if (type === 'balance') {
+      docTitle = 'Reste à charge';
+      bodyHtml = `
+        <table class="info"><tbody>
+          <tr><td>Facture</td><td><strong>${invoiceNumber}</strong></td></tr>
+          <tr><td>Client</td><td>${clientName}</td></tr>
+          <tr><td>Date d'émission</td><td>${fmtD(inv.issue_date || inv.created_at)}</td></tr>
+          ${inv.due_date ? `<tr><td>Échéance</td><td>${fmtD(inv.due_date)}</td></tr>` : ''}
+        </tbody></table>
+        <table class="fin"><tbody>
+          <tr><td>Montant total TTC</td><td style="text-align:right">${fmt(inv.amount_ttc)}</td></tr>
+          <tr><td>Déjà encaissé</td><td style="text-align:right">${fmt(totalPaid)}</td></tr>
+          <tr class="highlight"><td><strong>Reste à charge</strong></td><td style="text-align:right"><strong>${fmt(balance)}</strong></td></tr>
+        </tbody></table>`;
+    } else if (type === 'schedule') {
+      docTitle = 'Échéancier';
+      const rows = (schedule || []).map((s) => {
+        const total = Number(s.due_amount || 0) + Number(s.penalty_amount || 0);
+        return `<tr>
+          <td>${s.installment_no}</td>
+          <td>${s.label || `Échéance ${s.installment_no}`}</td>
+          <td>${fmtD(s.due_date)}</td>
+          <td style="text-align:right">${fmt(total)}</td>
+          <td>${s.penalty_amount > 0 ? `<span style="color:#dc2626">+ ${fmt(s.penalty_amount)} pén.</span>` : ''}</td>
+          <td>${STATUS_LABELS[s.status] || s.status}</td>
+        </tr>`;
+      }).join('');
+      bodyHtml = `
+        <table class="info"><tbody>
+          <tr><td>Facture</td><td><strong>${invoiceNumber}</strong></td></tr>
+          <tr><td>Client</td><td>${clientName}</td></tr>
+          <tr><td>Total TTC</td><td>${fmt(inv.amount_ttc)}</td></tr>
+        </tbody></table>
+        <table class="main"><thead><tr>
+          <th>N°</th><th>Libellé</th><th>Échéance</th><th>Montant</th><th>Pénalités</th><th>Statut</th>
+        </tr></thead><tbody>${rows}</tbody></table>`;
+    } else {
+      docTitle = 'Preuve de paiement';
+      const rows = (payments || []).map(PAY_METHOD_ROW).join('');
+      bodyHtml = `
+        <table class="info"><tbody>
+          <tr><td>Facture</td><td><strong>${invoiceNumber}</strong></td></tr>
+          <tr><td>Client</td><td>${clientName}</td></tr>
+        </tbody></table>
+        ${payments?.length
+          ? `<table class="main"><thead><tr><th>Date</th><th>Mode</th><th>Référence</th><th>Montant</th></tr></thead><tbody>${rows}</tbody></table>
+             <p class="total">Total encaissé : <strong>${fmt(totalPaid)}</strong></p>`
+          : '<p>Aucun paiement enregistré.</p>'}`;
+    }
+
+    const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8">
+      <style>
+        *{box-sizing:border-box;margin:0;padding:0}
+        body{font-family:Arial,sans-serif;font-size:13px;color:#111;padding:40px}
+        h1{font-size:22px;color:#1d4ed8;margin-bottom:4px}
+        .sub{color:#6b7280;font-size:11px;margin-bottom:24px}
+        .meta{display:flex;justify-content:space-between;margin-bottom:20px;font-size:11px;color:#6b7280}
+        table{width:100%;border-collapse:collapse;margin-bottom:16px}
+        table.info td{padding:4px 0;vertical-align:top}
+        table.info td:first-child{color:#6b7280;width:140px}
+        table.fin td,table.main td,table.main th{padding:8px 12px;border-bottom:1px solid #e5e7eb}
+        table.main th{background:#f9fafb;text-align:left;font-size:11px;text-transform:uppercase;color:#6b7280}
+        tr.highlight td{background:#eff6ff;font-size:14px}
+        .total{text-align:right;font-size:14px;margin-top:8px}
+        .footer{margin-top:40px;border-top:1px solid #e5e7eb;padding-top:12px;font-size:10px;color:#9ca3af}
+      </style>
+    </head><body>
+      <div class="meta">
+        <span>${companyName}</span>
+        <span>Généré le ${genDate}</span>
+      </div>
+      <h1>${docTitle}</h1>
+      <p class="sub">Facture ${invoiceNumber}</p>
+      ${bodyHtml}
+      <div class="footer">${companyName}${company?.address ? ' · ' + company.address : ''}${company?.siret ? ' · SIRET ' + company.siret : ''}</div>
+    </body></html>`;
+
+    const pdfBuffer = await renderPdfFromHtml(html, { format: 'A4', media: 'print' });
+    const fname = type === 'balance' ? 'Reste-a-charge' : type === 'schedule' ? 'Echeancier' : 'Preuve-paiement';
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${fname}-${invoiceNumber}.pdf"`);
+    res.send(Buffer.from(pdfBuffer));
+  } catch (err) {
+    console.error('[invoices/pdf-generic]', err);
+    res.status(500).json({ error: err instanceof Error ? err.message : 'PDF generation failed' });
+  }
+});
+
 ensureSupabaseOnBoot();
 
 const PORT = process.env.PORT || 3001;

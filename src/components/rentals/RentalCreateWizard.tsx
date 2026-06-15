@@ -12,6 +12,7 @@ L.Icon.Default.mergeOptions({
 });
 import { RentalCreatePayload, RentalItem, RentalItemGroup, RentalType } from '../../types/rental';
 import RentalEquipmentList from './RentalEquipmentList';
+import EquipmentCatalogPanel from './EquipmentCatalogPanel';
 import { useVehicles } from '../../hooks/useVehicles';
 import { usePersonnel } from '../../hooks/usePersonnel';
 import { useDeliveryOffers } from '../../hooks/useDeliveryOffers';
@@ -1389,25 +1390,46 @@ const RentalCreateWizard: React.FC<Props> = ({ onSubmit, clients }) => {
           )}
 
             {stepsDef[step] === 'items' && (
-              <div>
-              <RentalEquipmentList
-                items={items}
-                groups={itemGroups}
-                onQuantityChange={handleQuantityChange}
-                onDiscountChange={handleDiscountChange}
-                onRemoveItem={handleRemoveItem}
-                onAddItem={handleAddItem}
-                onAddExternalItem={handleAddExternalItem}
-                onAddGroup={handleAddGroup}
-                onRemoveGroup={handleRemoveGroup}
-                onMoveGroup={handleMoveGroup}
-                onMoveItem={handleMoveItem}
-                  startDate={startDate}
-                  endDate={endDate}
-                  externalTabLabel={type === 'sale' ? t('rentals.selection.tabs.purchase') : undefined}
-                  skipAvailability={type === 'sale'}
-                  coefficient={equipmentCoefficient}
-                />
+              <div className="flex gap-4" style={{ height: 'calc(100vh - 320px)', minHeight: '420px' }}>
+                {/* Catalog panel */}
+                <div className="w-60 xl:w-72 flex-shrink-0 flex flex-col bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+                  <div className="px-3 py-2.5 border-b border-gray-100 bg-gray-50/60 flex-shrink-0">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Catalogue</span>
+                  </div>
+                  <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+                    <EquipmentCatalogPanel
+                      existingItems={items}
+                      onAdd={(eq) => handleAddItem(eq, 1, null)}
+                      onRemoveItem={handleRemoveItem}
+                      onRemoveGroup={handleRemoveGroup}
+                      groups={itemGroups}
+                      startDate={startDate}
+                      endDate={endDate}
+                      skipAvailability={type === 'sale'}
+                    />
+                  </div>
+                </div>
+                {/* Equipment list */}
+                <div className="flex-1 min-w-0 overflow-auto">
+                  <RentalEquipmentList
+                    items={items}
+                    groups={itemGroups}
+                    onQuantityChange={handleQuantityChange}
+                    onDiscountChange={handleDiscountChange}
+                    onRemoveItem={handleRemoveItem}
+                    onAddItem={handleAddItem}
+                    onAddExternalItem={handleAddExternalItem}
+                    onAddGroup={handleAddGroup}
+                    onRemoveGroup={handleRemoveGroup}
+                    onMoveGroup={handleMoveGroup}
+                    onMoveItem={handleMoveItem}
+                    startDate={startDate}
+                    endDate={endDate}
+                    externalTabLabel={type === 'sale' ? t('rentals.selection.tabs.purchase') : undefined}
+                    skipAvailability={type === 'sale'}
+                    coefficient={equipmentCoefficient}
+                  />
+                </div>
               </div>
             )}
 

@@ -53,6 +53,7 @@ import { computeRentalCoefficient, normalizeRentalCoefficientMode } from '../uti
 import { ensureRentalDraftInvoice } from '../utils/rentalInvoice';
 import { resolveTemplateStudioSnapshotForDoc } from '../utils/templateStudioDocument';
 import { getRentalStatusLabel, getRentalStatusTone } from '../utils/rentalStatus';
+import InvoiceFinancialPanel from '../components/billing/InvoiceFinancialPanel';
 
 // ── Carte satellite livraison ────────────────────────────────────────────────
 const DeliveryMapFlyTo: React.FC<{ lat: number; lon: number }> = ({ lat, lon }) => {
@@ -780,6 +781,7 @@ const RentalDetail = () => {
   const [maintenanceLabel, setMaintenanceLabel] = React.useState('');
   const [maintenanceAmount, setMaintenanceAmount] = React.useState('');
   const [addingMaintenance, setAddingMaintenance] = React.useState(false);
+  const [linkedInvoiceId, setLinkedInvoiceId] = React.useState<string | null>(null);
   const [showPaymentModal, setShowPaymentModal] = React.useState(false);
   const [paymentAmount, setPaymentAmount] = React.useState('');
   const [savingPayment, setSavingPayment] = React.useState(false);
@@ -1050,6 +1052,22 @@ const RentalDetail = () => {
     return () => {
       cancelled = true;
     };
+  }, [rental?.id]);
+
+  React.useEffect(() => {
+    if (!rental?.id) { setLinkedInvoiceId(null); return; }
+    (supabase as any)
+      .from('invoices')
+      .select('id')
+      .eq('rental_id', rental.id)
+      .not('document_type', 'eq', 'quote')
+      .not('document_type', 'eq', 'credit_note')
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }: { data: { id: string } | null }) => {
+        setLinkedInvoiceId(data?.id ?? null);
+      });
   }, [rental?.id]);
 
   const isCancelled = rental?.status === 'cancelled';
@@ -5011,7 +5029,7 @@ const RentalDetail = () => {
           .from('payments')
           .insert([{
             rental_id: rental.id,
-            invoice_id: null,
+            invoice_id: linkedInvoiceId || null,
             amount: -Number(refundAmount.toFixed(2)),
             payment_method: 'Remboursement',
             payment_date: paymentDate,
@@ -5743,7 +5761,7 @@ const RentalDetail = () => {
 
       const insertPayload = {
         rental_id: rental.id,
-        invoice_id: null,
+        invoice_id: linkedInvoiceId || null,
         amount: roundedAmount,
         payment_method: isFreeRental ? 'Gratuit' : 'Paiement direct',
         payment_date: paymentDate,
@@ -5758,6 +5776,13 @@ const RentalDetail = () => {
         .select('id, amount, payment_method, payment_date, reference, status, invoice_id, payment_type')
         .single();
       if (insertError) throw insertError;
+
+      /* Sync invoice totals: create allocation so DB trigger recomputes paid_amount/balance_due/status */
+      if (linkedInvoiceId && roundedAmount > 0) {
+        await (supabase as any)
+          .from('invoice_payment_allocations')
+          .insert([{ invoice_id: linkedInvoiceId, payment_id: inserted.id, amount: roundedAmount }]);
+      }
 
       if (Object.keys(updates).length > 0) {
         const { error } = await supabase
@@ -7040,59 +7065,27 @@ const RentalDetail = () => {
                   </div>
                 </div>
 
-                <div className="bg-white rounded-lg shadow-sm p-6 space-y-4">
-                  <div className="flex flex-col gap-3">
-                    <h3 className="text-lg font-semibold text-gray-900">Historique des paiements</h3>
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 text-sm">
-                      <div className="rounded-lg bg-gray-50 p-3 shadow-sm">
-                        <span className="text-gray-600">Déjà encaissé&nbsp;:</span>{' '}
-                        <span className="font-semibold text-gray-900">{formatMoney(totalPaid)}</span>
-                      </div>
-                      <div className="rounded-lg bg-gray-50 p-3 shadow-sm">
-                        <span className="text-gray-600">Reste à payer&nbsp;:</span>{' '}
-                        <span className={`font-semibold ${remainingAmount === 0 ? 'text-green-700' : 'text-gray-900'}`}>
-                          {formatMoney(remainingAmount)}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                  {loadingPayments ? (
-                    <div className="text-sm text-gray-500">Chargement des paiements…</div>
-                  ) : paymentHistory.length === 0 ? (
-                    <div className="text-sm text-gray-500">{`Aucun paiement enregistré pour cette ${typeLabelLower}.`}</div>
-                  ) : (
-                    <div className="space-y-3">
-                      {paymentHistory.map((payment) => (
-                        <div key={payment.id} className="rounded-lg p-3 shadow-sm bg-white">
-                          <div className="flex justify-between items-start">
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <p className="text-sm font-medium text-gray-900">{formatMoney(payment.amount)}</p>
-                                <StatusBadge tone={PAYMENT_TYPE_TONE[payment.paymentType]} size="xs">
-                                  {PAYMENT_TYPE_LABEL[payment.paymentType]}
-                                </StatusBadge>
-                              </div>
-                              <p className="text-xs text-gray-500">{payment.method || '—'}</p>
-                              <p className="text-xs text-gray-500">Réf: {payment.reference || '—'}</p>
-                            </div>
-                            <div className="text-right">
-                              {(() => {
-                                const meta = PAYMENT_STATUS_META[payment.status] || PAYMENT_STATUS_META.completed;
-                                return (
-                                  <StatusBadge tone={meta.tone}>
-                                    {meta.label}
-                                  </StatusBadge>
-                                );
-                              })()}
-                              <p className="mt-1 text-xs text-gray-500">
-                                {payment.date ? new Date(payment.date).toLocaleDateString() : '—'}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                <div className="bg-white dark:bg-gray-900 rounded-lg shadow-sm p-6">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Gestion financière</h3>
+                  <InvoiceFinancialPanel
+                    invoiceId={linkedInvoiceId}
+                    rentalId={rental?.id ?? null}
+                    totalTTC={totalTTC}
+                    clientEmail={rental?.client_email ?? null}
+                    clientName={rental?.client_name ?? null}
+                    invoiceNumber={rental?.reference_code ?? null}
+                    onPaymentChange={() => {
+                      /* refresh payment history so existing totals stay in sync */
+                      (supabase as any)
+                        .from('payments')
+                        .select('id, amount, payment_method, payment_date, reference, status, invoice_id, payment_type')
+                        .eq('rental_id', rental?.id)
+                        .order('payment_date', { ascending: false, nullsFirst: false })
+                        .then(({ data }: { data: any[] | null }) => {
+                          setPaymentHistory((data || []).map(mapPaymentRow));
+                        });
+                    }}
+                  />
                 </div>
               </div>
             </div>

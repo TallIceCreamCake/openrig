@@ -380,6 +380,15 @@ const Accounting: React.FC = () => {
     loadAccountingData();
   }, []);
 
+  /* Refresh summary data whenever the user comes back from a document sub-route */
+  const prevIsDocumentsRef = useRef(isDocumentsRoute);
+  useEffect(() => {
+    if (prevIsDocumentsRef.current && !isDocumentsRoute) {
+      loadAccountingData(true);
+    }
+    prevIsDocumentsRef.current = isDocumentsRoute;
+  }, [isDocumentsRoute]);
+
   useEffect(() => {
     const order = tabs.map((tab) => tab.id);
     const prevIndex = order.indexOf(prevTabRef.current);
@@ -420,7 +429,11 @@ const Accounting: React.FC = () => {
   const receivableRows = useMemo(
     () =>
       invoiceBalances
-        .filter((row) => row.remainingAmount > 0 && row.invoice.status !== 'paid' && row.invoice.status !== 'draft')
+        /* Keep invoices with a real outstanding balance.
+           We intentionally do NOT exclude status==='paid' because a refund can create
+           a positive remaining balance without the DB trigger being able to flip the status
+           (allocations require amount > 0, so refunds bypass the recompute path). */
+        .filter((row) => row.remainingAmount > 0 && row.invoice.status !== 'draft' && row.invoice.status !== 'cancelled')
         .sort((a, b) => {
           const dateA = parseDate(a.invoice.due_date)?.getTime() || Number.MAX_SAFE_INTEGER;
           const dateB = parseDate(b.invoice.due_date)?.getTime() || Number.MAX_SAFE_INTEGER;
@@ -606,14 +619,20 @@ const Accounting: React.FC = () => {
 
   const renderOverviewTab = () => (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <div className="rounded-lg border border-gray-200 bg-white p-4">
           <p className="text-sm font-medium text-gray-500">CA facturé (TTC)</p>
           <p className="mt-2 text-2xl font-semibold text-gray-900">{MONEY.format(metrics.invoicedTtc)}</p>
         </div>
         <div className="rounded-lg border border-gray-200 bg-white p-4">
-          <p className="text-sm font-medium text-gray-500">Encaissements</p>
+          <p className="text-sm font-medium text-gray-500">Encaissé (brut)</p>
           <p className="mt-2 text-2xl font-semibold text-gray-900">{MONEY.format(metrics.collected)}</p>
+        </div>
+        <div className="rounded-lg border border-rose-200 bg-rose-50 p-4">
+          <p className="text-sm font-medium text-rose-600">Remboursements</p>
+          <p className="mt-2 text-2xl font-semibold text-rose-700">
+            {metrics.refunded > 0 ? `− ${MONEY.format(metrics.refunded)}` : MONEY.format(0)}
+          </p>
         </div>
         <div className="rounded-lg border border-gray-200 bg-white p-4">
           <p className="text-sm font-medium text-gray-500">Encours client</p>
@@ -635,6 +654,11 @@ const Accounting: React.FC = () => {
             <div className="rounded-md bg-yellow-50 px-3 py-2 text-yellow-800">
               {metrics.dueSoonCount} facture(s) arrivent à échéance sous 7 jours
             </div>
+            {metrics.refunded > 0 && (
+              <div className="rounded-md bg-rose-50 px-3 py-2 text-rose-700">
+                {MONEY.format(metrics.refunded)} remboursé(s) sur la période — vérifier les encours associés
+              </div>
+            )}
             <div className="rounded-md bg-blue-50 px-3 py-2 text-blue-700">
               {autoEntrepreneurMode
                 ? 'Régime auto-entrepreneur actif: TVA non applicable.'
@@ -775,23 +799,27 @@ const Accounting: React.FC = () => {
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Date</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Référence</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Client</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Type</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">Montant</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Statut</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {payments.slice(0, 25).map((payment) => (
+              {payments.slice(0, 50).map((payment) => (
                 <tr key={payment.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3 text-sm text-gray-700">{formatDateLabel(payment.payment_date)}</td>
                   <td className="px-4 py-3 text-sm text-gray-700">{payment.reference || payment.id.slice(0, 8)}</td>
                   <td className="px-4 py-3 text-sm text-gray-700">{payment.client?.name || '—'}</td>
-                  <td className={`px-4 py-3 text-right text-sm font-semibold ${payment.amount >= 0 ? 'text-green-700' : 'text-red-700'}`}>
-                    {MONEY.format(payment.amount)}
-                  </td>
                   <td className="px-4 py-3">
-                    <StatusBadge tone={statusPill(payment.status)}>
-                      {statusLabel(payment.status)}
-                    </StatusBadge>
+                    {payment.payment_type === 'refund' ? (
+                      <span className="inline-flex items-center rounded-full bg-rose-100 px-2 py-0.5 text-xs font-semibold text-rose-700">Remboursement</span>
+                    ) : payment.payment_type === 'deposit' ? (
+                      <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">Acompte</span>
+                    ) : (
+                      <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">Paiement</span>
+                    )}
+                  </td>
+                  <td className={`px-4 py-3 text-right text-sm font-semibold ${payment.amount >= 0 ? 'text-green-700' : 'text-rose-700'}`}>
+                    {payment.amount < 0 ? `− ${MONEY.format(Math.abs(payment.amount))}` : MONEY.format(payment.amount)}
                   </td>
                 </tr>
               ))}
