@@ -15,7 +15,7 @@ type Payment = {
 
 export type DocumentClientInfo = {
   name?: string | null;
-  company?: string | null;
+  company_client_name?: string | null;
   address?: string | null;
   email?: string | null;
   phone?: string | null;
@@ -724,7 +724,7 @@ export const buildRentalDocument = ({
   const periodLabel = `${formatDate(rental.start_date)} → ${formatDate(rental.end_date)}`.trim();
   const showSplitInfo = docType === 'devis' || docType === 'facture';
   const clientName = client?.name || rental.client_name || '';
-  const clientCompany = client?.company?.trim() || '';
+  const clientCompany = client?.company_client_name?.trim() || '';
   const representsCompany = Boolean(clientCompany) && (rental.client_represents_company ?? true);
   const clientProfileLabel = representsCompany ? 'Entreprise' : 'Particulier';
   const billingAddress = client?.address?.trim() || '';

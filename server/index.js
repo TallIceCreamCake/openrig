@@ -16,6 +16,7 @@ import { fileURLToPath } from 'url';
 import { spawn } from 'child_process';
 import { renderPdfFromHtml } from './pdf/pdfRenderer.js';
 import { buildRentalDocumentHtml } from './pdf/rentalDocumentHtml.js';
+import { mountPublicApi } from './publicApi.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -685,6 +686,49 @@ const setSupabaseHealth = (patch = {}) => {
   };
 };
 
+// Idempotent: adds client portal request tables if they don't exist yet.
+// Safe to run on every boot; uses IF NOT EXISTS everywhere.
+const autoApplyClientPortalMigrations = async () => {
+  const dbInfo = readDatabaseInfo();
+  if (!dbInfo) return;
+  const dbUrl = buildDbUrlFromInfo(dbInfo);
+  if (!dbUrl) return;
+  const sql = `
+    ALTER TABLE equipment ADD COLUMN IF NOT EXISTS is_public boolean DEFAULT false NOT NULL;
+
+    CREATE TABLE IF NOT EXISTS client_portal_requests (
+      id              uuid        DEFAULT gen_random_uuid() PRIMARY KEY,
+      client_id       uuid        NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+      status          text        NOT NULL DEFAULT 'pending'
+                                  CHECK (status IN ('pending', 'converted', 'rejected')),
+      start_date      date        NOT NULL,
+      end_date        date        NOT NULL,
+      message         text,
+      equipment_items jsonb       NOT NULL DEFAULT '[]'::jsonb,
+      created_at      timestamptz NOT NULL DEFAULT now(),
+      converted_at    timestamptz,
+      rental_id       uuid        REFERENCES rentals(id) ON DELETE SET NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_cpr_client ON client_portal_requests (client_id);
+    CREATE INDEX IF NOT EXISTS idx_cpr_status  ON client_portal_requests (status);
+
+    ALTER TABLE client_portal_requests ADD COLUMN IF NOT EXISTS project_type text CHECK (project_type IN ('rental', 'service'));
+
+    ALTER TABLE rentals ADD COLUMN IF NOT EXISTS portal_request_id         uuid        REFERENCES client_portal_requests(id) ON DELETE SET NULL;
+    ALTER TABLE rentals ADD COLUMN IF NOT EXISTS portal_validated          boolean     DEFAULT false NOT NULL;
+    ALTER TABLE rentals ADD COLUMN IF NOT EXISTS portal_validated_at       timestamptz;
+    ALTER TABLE rentals ADD COLUMN IF NOT EXISTS portal_validated_by_id    uuid        REFERENCES app_users(id) ON DELETE SET NULL;
+    ALTER TABLE rentals ADD COLUMN IF NOT EXISTS portal_validation_notes   text;
+  `;
+  try {
+    await runPsqlQuery({ dbUrl, sql });
+    console.info('[migrations] client_portal_requests: OK');
+  } catch (err) {
+    console.warn('[migrations] client_portal_requests migration skipped:', err?.message || err);
+  }
+};
+
 const applyStructureEvaluation = (result) => {
   if (!result) return;
 
@@ -705,6 +749,9 @@ const applyStructureEvaluation = (result) => {
         lastError: null,
         forceReset: false,
         lastCompletedAt: new Date().toISOString(),
+      });
+      autoApplyClientPortalMigrations().catch((err) => {
+        console.warn('[migrations] auto-apply failed', err);
       });
     }
     return;
@@ -2698,6 +2745,49 @@ const notifyQuoteDecision = async ({ rental, decision, actorName, requestId, res
   }
 };
 
+const sendPortalRequestNotification = async ({ clientId, startDate, endDate, itemCount }) => {
+  try {
+    const { data: client } = await supabase.from('clients').select('name').eq('id', clientId).maybeSingle();
+    const clientName = client?.name || 'Un client';
+
+    const { data: permRows } = await supabase
+      .from('app_permissions')
+      .select('user_id')
+      .or(['superadmin.eq.true', 'can_manage_notifications.eq.true', 'rn_view_menu.eq.true', 'rn_create.eq.true'].join(','));
+
+    const recipientIds = [...new Set(
+      (permRows || []).map((r) => r?.user_id).filter(Boolean),
+    )];
+    if (recipientIds.length === 0) return;
+
+    const fmt = (d) => {
+      if (!d) return '';
+      const [y, m, day] = String(d).split('T')[0].split('-');
+      return `${day}/${m}/${y}`;
+    };
+    const dateRange = startDate && endDate
+      ? `du ${fmt(startDate)} au ${fmt(endDate)}`
+      : startDate ? `à partir du ${fmt(startDate)}` : '';
+    const itemLabel = itemCount === 1 ? '1 équipement' : `${itemCount} équipements`;
+
+    const payload = recipientIds.map((recipient_id) => ({
+      type: 'client',
+      title: 'Nouvelle demande de projet',
+      message: `${clientName} a soumis une demande de projet (${itemLabel}${dateRange ? ` — ${dateRange}` : ''}).`,
+      action_url: '/rentals',
+      action_label: 'Voir les demandes',
+      avatar: null,
+      metadata: { clientId, startDate, endDate },
+      recipient_id,
+    }));
+
+    const { error } = await supabase.from('notifications').insert(payload);
+    if (error) console.warn('[portal-request-notification] insert error', error);
+  } catch (err) {
+    console.warn('[portal-request-notification] unexpected error', err);
+  }
+};
+
 const renderBrandEmail = ({ headline, subtitle, boxesHtml, footerLine, note, eyebrow = 'Sécurité du compte', bodyHtml, logoUrl }) => {
   const footerHtml = footerLine ? `
                   <tr>
@@ -3663,6 +3753,1237 @@ app.post('/api/system/company-setup/logo-upload', async (req, res) => {
       error: 'logo_upload_failed',
       details: err instanceof Error ? err.message : String(err),
     });
+  }
+});
+
+app.get('/api/client-portal/company-info', async (req, res) => {
+  if (!isSupabaseReady()) return res.status(503).json({ error: 'supabase_not_ready' });
+  try {
+    const { data, error } = await supabase
+      .from('company_settings')
+      .select('name, email, phone, address')
+      .eq('id', 1)
+      .maybeSingle();
+    if (error) throw error;
+    return res.json({
+      name: data?.name || 'votre prestataire',
+      email: data?.email || null,
+      phone: data?.phone || null,
+      address: data?.address || null,
+    });
+  } catch (err) {
+    return res.status(500).json({ error: 'fetch_failed' });
+  }
+});
+
+// ─────────────────────────────────────────────
+//  CLIENT PORTAL — auth helpers
+// ─────────────────────────────────────────────
+const cpHashPassword = (password, salt) => {
+  const derived = crypto.scryptSync(password, salt, 64);
+  return derived.toString('hex');
+};
+const cpVerifyPassword = (password, salt, hash) => {
+  if (!password || !salt || !hash) return false;
+  const derived = crypto.scryptSync(password, salt, 64);
+  const hashBuffer = Buffer.from(hash, 'hex');
+  if (hashBuffer.length !== derived.length) return false;
+  return crypto.timingSafeEqual(hashBuffer, derived);
+};
+const cpGenerateTempPassword = () => {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#';
+  return Array.from({ length: 12 }, () => chars[crypto.randomInt(chars.length)]).join('');
+};
+const cpGenerateSessionToken = () => crypto.randomBytes(32).toString('hex');
+
+const cpVerifySession = async (req) => {
+  const auth = req.headers.authorization || '';
+  const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : null;
+  if (!token) return null;
+  const { data, error } = await supabase
+    .from('client_portal_sessions')
+    .select('id, account_id, expires_at, client_portal_accounts(id, client_id, email, must_change_password)')
+    .eq('token', token)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  if (new Date(data.expires_at) < new Date()) return null;
+  return data;
+};
+
+const cpSendCredentialsEmail = async (to, clientName, tempPassword, companyName) => {
+  const mailConfig = readMailConfig({ includeSecrets: true });
+  const transporter = buildTransporter(mailConfig);
+  const fromAddress = mailConfig.user || RESET_MAIL_SENDER;
+
+  const htmlBody = renderBrandEmail({
+    eyebrow: 'Espace Client',
+    headline: 'Vos identifiants de connexion',
+    subtitle: `${companyName} vous invite à accéder à votre espace client en ligne.`,
+    bodyHtml: `
+      <p style="margin:0 0 16px;font-size:15px;color:#334155;">Bonjour ${escapeHtml(clientName)},</p>
+      <p style="margin:0 0 24px;font-size:15px;color:#475569;">
+        Votre espace client vient d'être activé. Utilisez les identifiants ci-dessous pour vous connecter.
+        Il vous sera demandé de définir un nouveau mot de passe lors de votre première connexion.
+      </p>
+      <table cellpadding="0" cellspacing="0" style="width:100%;margin-bottom:24px;">
+        <tr>
+          <td style="padding:16px 20px;background:#f1f5f9;border-radius:12px;">
+            <p style="margin:0 0 8px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:#64748b;">Adresse e-mail</p>
+            <p style="margin:0;font-size:15px;font-weight:600;color:#0f172a;">${escapeHtml(to)}</p>
+          </td>
+        </tr>
+        <tr><td style="height:10px;"></td></tr>
+        <tr>
+          <td style="padding:16px 20px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;">
+            <p style="margin:0 0 8px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:#16a34a;">Mot de passe provisoire</p>
+            <p style="margin:0;font-size:18px;font-weight:700;font-family:'IBM Plex Mono',monospace;color:#15803d;letter-spacing:.05em;">${escapeHtml(tempPassword)}</p>
+          </td>
+        </tr>
+      </table>
+      <p style="margin:0;font-size:13px;color:#94a3b8;">Ce mot de passe est provisoire et devra être changé dès votre première connexion.</p>
+    `,
+    footerLine: `Propulsé par OpenRig · ${companyName}`,
+    note: "Si vous n'êtes pas concerné par ce message, ignorez-le.",
+  });
+
+  const textBody = [
+    `Bonjour ${clientName},`,
+    '',
+    `${companyName} vous invite à accéder à votre espace client.`,
+    '',
+    `Adresse e-mail : ${to}`,
+    `Mot de passe provisoire : ${tempPassword}`,
+    '',
+    'Rendez-vous sur votre espace client et changez votre mot de passe dès la première connexion.',
+  ].join('\n');
+
+  await transporter.sendMail({
+    from: `"${companyName}" <${fromAddress}>`,
+    to,
+    subject: `${companyName} — Vos identifiants espace client`,
+    text: textBody,
+    html: htmlBody,
+  });
+};
+
+// ── GET portal account status for a client (internal use)
+app.get('/api/client-portal/account/:clientId', async (req, res) => {
+  if (!isSupabaseReady()) return res.status(503).json({ error: 'supabase_not_ready' });
+  try {
+    const { clientId } = req.params;
+    const { data, error } = await supabase
+      .from('client_portal_accounts')
+      .select('id, email, must_change_password, created_at, activated_at, last_login_at')
+      .eq('client_id', clientId)
+      .maybeSingle();
+    if (error) throw error;
+    return res.json({ account: data || null });
+  } catch {
+    return res.status(500).json({ error: 'fetch_failed' });
+  }
+});
+
+// ── POST create/resend credentials for a client
+app.post('/api/client-portal/account/:clientId/send-credentials', async (req, res) => {
+  if (!isSupabaseReady()) return res.status(503).json({ error: 'supabase_not_ready' });
+  try {
+    const { clientId } = req.params;
+
+    // Fetch client info
+    const { data: client, error: clientErr } = await supabase
+      .from('clients')
+      .select('id, name, email, client_type')
+      .eq('id', clientId)
+      .maybeSingle();
+    if (clientErr) throw clientErr;
+    if (!client) return res.status(404).json({ error: 'client_not_found' });
+    if (client.client_type === 'company') return res.status(400).json({ error: 'companies_not_supported' });
+
+    const emailTo = (req.body?.email || client.email || '').trim().toLowerCase();
+    if (!emailTo || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTo)) {
+      return res.status(400).json({ error: 'invalid_email' });
+    }
+
+    // Check existing account — only allowed if not yet activated
+    const { data: existing, error: existingErr } = await supabase
+      .from('client_portal_accounts')
+      .select('id, must_change_password')
+      .eq('client_id', clientId)
+      .maybeSingle();
+    if (existingErr) throw existingErr;
+    if (existing && !existing.must_change_password) {
+      return res.status(409).json({ error: 'already_activated', message: 'Le compte est déjà activé. Utilisez la réinitialisation de mot de passe.' });
+    }
+
+    // Generate credentials
+    const tempPassword = cpGenerateTempPassword();
+    const salt = crypto.randomBytes(16).toString('hex');
+    const hash = cpHashPassword(tempPassword, salt);
+
+    if (existing) {
+      const { error: updErr } = await supabase
+        .from('client_portal_accounts')
+        .update({ email: emailTo, password_hash: hash, password_salt: salt, must_change_password: true, activated_at: null })
+        .eq('id', existing.id);
+      if (updErr) throw new Error(`DB update failed: ${updErr.message}`);
+    } else {
+      const { error: insErr } = await supabase
+        .from('client_portal_accounts')
+        .insert({ client_id: clientId, email: emailTo, password_hash: hash, password_salt: salt, must_change_password: true });
+      if (insErr) throw new Error(`DB insert failed: ${insErr.message} — Avez-vous appliqué la migration 20260615_client_portal.sql ?`);
+    }
+
+    // Fetch company name for email
+    const { data: company } = await supabase.from('company_settings').select('name').eq('id', 1).maybeSingle();
+    const companyName = company?.name || 'OpenRig';
+
+    await cpSendCredentialsEmail(emailTo, client.name, tempPassword, companyName);
+    return res.json({ ok: true, email: emailTo });
+  } catch (err) {
+    console.error('[client-portal/send-credentials]', err);
+    return res.status(500).json({ error: err instanceof Error ? err.message : 'send_failed' });
+  }
+});
+
+// ── POST reset password for an activated client
+app.post('/api/client-portal/account/:clientId/reset-password', async (req, res) => {
+  if (!isSupabaseReady()) return res.status(503).json({ error: 'supabase_not_ready' });
+  try {
+    const { clientId } = req.params;
+
+    const { data: account, error: accountErr } = await supabase
+      .from('client_portal_accounts')
+      .select('id, email, must_change_password')
+      .eq('client_id', clientId)
+      .maybeSingle();
+    if (accountErr) throw accountErr;
+    if (!account) return res.status(404).json({ error: 'no_account' });
+
+    const { data: client } = await supabase.from('clients').select('name').eq('id', clientId).maybeSingle();
+    const { data: company } = await supabase.from('company_settings').select('name').eq('id', 1).maybeSingle();
+    const companyName = company?.name || 'OpenRig';
+
+    const tempPassword = cpGenerateTempPassword();
+    const salt = crypto.randomBytes(16).toString('hex');
+    const hash = cpHashPassword(tempPassword, salt);
+
+    await supabase
+      .from('client_portal_accounts')
+      .update({ password_hash: hash, password_salt: salt, must_change_password: true, activated_at: null })
+      .eq('id', account.id);
+
+    // Invalidate existing sessions
+    await supabase.from('client_portal_sessions').delete().eq('account_id', account.id);
+
+    await cpSendCredentialsEmail(account.email, client?.name || account.email, tempPassword, companyName);
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error('[client-portal/reset-password]', err);
+    return res.status(500).json({ error: err instanceof Error ? err.message : 'reset_failed' });
+  }
+});
+
+// ── POST login (client portal)
+app.post('/api/client-portal/login', async (req, res) => {
+  if (!isSupabaseReady()) return res.status(503).json({ error: 'supabase_not_ready' });
+  try {
+    const { email, password } = req.body || {};
+    if (typeof email !== 'string' || !email.trim()) return res.status(400).json({ error: 'email_required' });
+    if (typeof password !== 'string' || !password) return res.status(400).json({ error: 'password_required' });
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const { data: account, error: accountErr } = await supabase
+      .from('client_portal_accounts')
+      .select('id, client_id, email, password_hash, password_salt, must_change_password')
+      .eq('email', normalizedEmail)
+      .maybeSingle();
+    if (accountErr) throw accountErr;
+
+    if (!account || !cpVerifyPassword(password, account.password_salt, account.password_hash)) {
+      return res.status(401).json({ error: 'Identifiants invalides' });
+    }
+
+    const token = cpGenerateSessionToken();
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    const { error: sessionErr } = await supabase.from('client_portal_sessions').insert({ account_id: account.id, token, expires_at: expiresAt });
+    if (sessionErr) throw sessionErr;
+    await supabase.from('client_portal_accounts').update({ last_login_at: new Date().toISOString() }).eq('id', account.id);
+
+    return res.json({
+      ok: true,
+      token,
+      expires_at: expiresAt,
+      must_change_password: account.must_change_password,
+      client_id: account.client_id,
+      email: account.email,
+    });
+  } catch (err) {
+    console.error('[client-portal/login]', err);
+    return res.status(500).json({ error: 'login_failed' });
+  }
+});
+
+// ── POST change password (first login or reset)
+app.post('/api/client-portal/change-password', async (req, res) => {
+  if (!isSupabaseReady()) return res.status(503).json({ error: 'supabase_not_ready' });
+  try {
+    const session = await cpVerifySession(req);
+    if (!session) return res.status(401).json({ error: 'session_invalide' });
+
+    const { newPassword } = req.body || {};
+    if (typeof newPassword !== 'string' || newPassword.length < 8) {
+      return res.status(400).json({ error: 'Le mot de passe doit contenir au moins 8 caractères.' });
+    }
+
+    const account = session.client_portal_accounts;
+    const salt = crypto.randomBytes(16).toString('hex');
+    const hash = cpHashPassword(newPassword, salt);
+
+    await supabase
+      .from('client_portal_accounts')
+      .update({ password_hash: hash, password_salt: salt, must_change_password: false, activated_at: new Date().toISOString() })
+      .eq('id', account.id);
+
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error('[client-portal/change-password]', err);
+    return res.status(500).json({ error: 'change_failed' });
+  }
+});
+
+// ── GET current session info
+app.get('/api/client-portal/me', async (req, res) => {
+  if (!isSupabaseReady()) return res.status(503).json({ error: 'supabase_not_ready' });
+  try {
+    const session = await cpVerifySession(req);
+    if (!session) return res.status(401).json({ error: 'session_invalide' });
+    const account = session.client_portal_accounts;
+    const { data: clientRow } = await supabase
+      .from('clients')
+      .select('name, phone, company_client_id')
+      .eq('id', account.client_id)
+      .maybeSingle();
+    let companyName = null;
+    if (clientRow?.company_client_id) {
+      const { data: companyRow } = await supabase
+        .from('clients')
+        .select('name')
+        .eq('id', clientRow.company_client_id)
+        .maybeSingle();
+      companyName = companyRow?.name || null;
+    }
+    return res.json({
+      ok: true,
+      client_id: account.client_id,
+      email: account.email,
+      must_change_password: account.must_change_password,
+      name: clientRow?.name || null,
+      phone: clientRow?.phone || null,
+      company_client_id: clientRow?.company_client_id || null,
+      company_name: companyName,
+    });
+  } catch {
+    return res.status(500).json({ error: 'fetch_failed' });
+  }
+});
+
+// ── PATCH /me — update personal info
+app.patch('/api/client-portal/me', async (req, res) => {
+  if (!isSupabaseReady()) return res.status(503).json({ error: 'supabase_not_ready' });
+  try {
+    const session = await cpVerifySession(req);
+    if (!session) return res.status(401).json({ error: 'session_invalide' });
+    const { name, phone } = req.body || {};
+    const updates = {};
+    if (typeof name === 'string') updates.name = name.trim() || null;
+    if (typeof phone === 'string') updates.phone = phone.trim() || null;
+    if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'no_fields' });
+    const { error } = await supabase
+      .from('clients')
+      .update(updates)
+      .eq('id', session.client_portal_accounts.client_id);
+    if (error) throw error;
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error('[client-portal/me PATCH]', err);
+    return res.status(500).json({ error: 'update_failed' });
+  }
+});
+
+// ── POST /company-report — client signals an error in their company's info
+app.post('/api/client-portal/company-report', async (req, res) => {
+  if (!isSupabaseReady()) return res.status(503).json({ error: 'supabase_not_ready' });
+  try {
+    const session = await cpVerifySession(req);
+    if (!session) return res.status(401).json({ error: 'session_invalide' });
+    const clientId = session.client_portal_accounts.client_id;
+    const { message } = req.body || {};
+    if (!message || typeof message !== 'string' || !message.trim()) {
+      return res.status(400).json({ error: 'message_required' });
+    }
+    const { data: clientRow } = await supabase
+      .from('clients')
+      .select('company_client_id')
+      .eq('id', clientId)
+      .maybeSingle();
+    if (!clientRow?.company_client_id) {
+      return res.status(400).json({ error: 'no_company_linked' });
+    }
+    const { error } = await supabase
+      .from('client_portal_company_reports')
+      .insert({
+        client_id: clientId,
+        company_client_id: clientRow.company_client_id,
+        message: message.trim(),
+      });
+    if (error) throw error;
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error('[client-portal/company-report]', err);
+    return res.status(500).json({ error: 'report_failed' });
+  }
+});
+
+// ── GET /quotes — list quotes for authenticated client
+// ── DEBUG — remove after diagnosis
+app.get('/api/client-portal/debug-docs', async (req, res) => {
+  if (!isSupabaseReady()) return res.status(503).json({ error: 'supabase_not_ready' });
+  try {
+    const session = await cpVerifySession(req);
+    if (!session) return res.status(401).json({ error: 'session_invalide' });
+    const clientId = session.client_portal_accounts.client_id;
+
+    const { data: clientRow } = await supabase.from('clients').select('company_client_id').eq('id', clientId).maybeSingle();
+    const clientIds = [clientId];
+    if (clientRow?.company_client_id) clientIds.push(clientRow.company_client_id);
+
+    const { data: clientRentals } = await supabase.from('rentals').select('id, client_id, title').in('client_id', clientIds);
+    const rentalIds = (clientRentals || []).map((r) => r.id);
+
+    const COLS = 'id, invoice_number, document_type, status, quote_status, client_id, rental_id, created_at';
+
+    // 3 separate queries to isolate the issue
+    const [q1, q2, q3] = await Promise.all([
+      // By client_id directly
+      supabase.from('invoices').select(COLS).in('client_id', clientIds).order('created_at', { ascending: false }).limit(20),
+      // By rental_id
+      rentalIds.length > 0
+        ? supabase.from('invoices').select(COLS).in('rental_id', rentalIds).order('created_at', { ascending: false }).limit(20)
+        : Promise.resolve({ data: [], error: null }),
+      // Last 10 invoices in DB regardless (to see what's there)
+      supabase.from('invoices').select(COLS).order('created_at', { ascending: false }).limit(10),
+    ]);
+
+    return res.json({
+      client_id: clientId,
+      company_client_id: clientRow?.company_client_id || null,
+      clientIds,
+      rentals: clientRentals || [],
+      rental_ids: rentalIds,
+      by_client_id: { count: q1.data?.length || 0, error: q1.error?.message || null, docs: q1.data || [] },
+      by_rental_id: { count: q2.data?.length || 0, error: q2.error?.message || null, docs: q2.data || [] },
+      last_10_in_db: { count: q3.data?.length || 0, error: q3.error?.message || null, docs: q3.data || [] },
+    });
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
+app.get('/api/client-portal/quotes', async (req, res) => {
+  if (!isSupabaseReady()) return res.status(503).json({ error: 'supabase_not_ready' });
+  try {
+    const session = await cpVerifySession(req);
+    if (!session) return res.status(401).json({ error: 'session_invalide' });
+    const clientId = session.client_portal_accounts.client_id;
+
+    const { data: clientRow } = await supabase
+      .from('clients')
+      .select('company_client_id')
+      .eq('id', clientId)
+      .maybeSingle();
+    const clientIds = [clientId];
+    if (clientRow?.company_client_id) clientIds.push(clientRow.company_client_id);
+
+    // Fetch client's rental IDs to also find docs linked by rental_id
+    const { data: clientRentals } = await supabase
+      .from('rentals')
+      .select('id')
+      .in('client_id', clientIds);
+    const rentalIds = (clientRentals || []).map((r) => r.id);
+
+    // Query by client_id OR by rental_id (auto-generated docs may only have rental_id)
+    const SELECT_COLS = 'id, invoice_number, document_type, status, quote_status, amount_ht, amount_ttc, vat_amount, due_date, created_at, rental_id, client_id';
+
+    const [byClient, byRental] = await Promise.all([
+      supabase
+        .from('invoices')
+        .select(SELECT_COLS)
+        .in('client_id', clientIds)
+        .eq('document_type', 'quote')
+        .neq('status', 'cancelled')
+        .order('created_at', { ascending: false }),
+      rentalIds.length > 0
+        ? supabase
+            .from('invoices')
+            .select(SELECT_COLS)
+            .in('rental_id', rentalIds)
+            .eq('document_type', 'quote')
+            .neq('status', 'cancelled')
+            .order('created_at', { ascending: false })
+        : Promise.resolve({ data: [] }),
+    ]);
+
+    if (byClient.error) throw byClient.error;
+
+    // Merge + deduplicate
+    const seen = new Set();
+    const quotes = [...(byClient.data || []), ...(byRental.data || [])].filter((d) => {
+      if (seen.has(d.id)) return false;
+      seen.add(d.id);
+      return true;
+    });
+    quotes.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+    return res.json({ ok: true, quotes });
+  } catch (err) {
+    console.error('[client-portal/quotes]', err);
+    return res.status(500).json({ error: 'fetch_failed' });
+  }
+});
+
+// ── GET /quotes/:id/pdf — proxy PDF for authenticated client
+app.get('/api/client-portal/quotes/:id/pdf', async (req, res) => {
+  if (!isSupabaseReady()) return res.status(503).json({ error: 'supabase_not_ready' });
+  try {
+    const session = await cpVerifySession(req);
+    if (!session) return res.status(401).json({ error: 'session_invalide' });
+    const clientId = session.client_portal_accounts.client_id;
+    const quoteId = req.params.id;
+    if (!UUID_REGEX.test(quoteId)) return res.status(400).json({ error: 'id_invalide' });
+
+    const { data: clientRow } = await supabase
+      .from('clients')
+      .select('company_client_id')
+      .eq('id', clientId)
+      .maybeSingle();
+    const allowedIds = [clientId];
+    if (clientRow?.company_client_id) allowedIds.push(clientRow.company_client_id);
+
+    const { data: doc } = await supabase
+      .from('invoices')
+      .select('id, client_id')
+      .eq('id', quoteId)
+      .eq('document_type', 'quote')
+      .in('client_id', allowedIds)
+      .maybeSingle();
+    if (!doc) return res.status(403).json({ error: 'access_denied' });
+
+    const internalUrl = `http://localhost:${process.env.PORT || 3001}/api/invoices/${quoteId}/pdf`;
+    const http = await import('http');
+    const proxyReq = http.request(internalUrl, { method: 'GET' }, (proxyRes) => {
+      res.setHeader('Content-Type', proxyRes.headers['content-type'] || 'application/pdf');
+      res.setHeader('Content-Disposition', proxyRes.headers['content-disposition'] || `attachment; filename="devis-${quoteId}.pdf"`);
+      proxyRes.pipe(res);
+    });
+    proxyReq.on('error', (e) => {
+      console.error('[client-portal/quotes/pdf proxy]', e);
+      res.status(500).json({ error: 'pdf_failed' });
+    });
+    proxyReq.end();
+  } catch (err) {
+    console.error('[client-portal/quotes/:id/pdf]', err);
+    return res.status(500).json({ error: 'pdf_failed' });
+  }
+});
+
+// ── POST /quotes/:id/sign — client signs (accept/refuse/modification) from portal
+app.post('/api/client-portal/quotes/:id/sign', async (req, res) => {
+  if (!isSupabaseReady()) return res.status(503).json({ error: 'supabase_not_ready' });
+  try {
+    const session = await cpVerifySession(req);
+    if (!session) return res.status(401).json({ error: 'session_invalide' });
+    const clientId = session.client_portal_accounts.client_id;
+    const quoteId = req.params.id;
+    const { decision, signer_name, comment } = req.body || {};
+
+    if (!['accept', 'refuse', 'modification'].includes(decision)) {
+      return res.status(400).json({ error: 'decision_invalide' });
+    }
+    const signerName = typeof signer_name === 'string' ? signer_name.trim() : '';
+    if (!signerName || signerName.length < 2 || signerName.length > 120) {
+      return res.status(400).json({ error: 'signer_name_required' });
+    }
+
+    // Load the quote and verify it belongs to this client
+    const { data: quote, error: quoteErr } = await supabase
+      .from('invoices')
+      .select('id, invoice_number, document_type, quote_status, rental_id, client_id')
+      .eq('id', quoteId)
+      .maybeSingle();
+    if (quoteErr) throw quoteErr;
+    if (!quote) return res.status(404).json({ error: 'devis_introuvable' });
+    if (quote.document_type !== 'quote') return res.status(400).json({ error: 'not_a_quote' });
+
+    // Verify ownership: direct client_id match OR via rental
+    let rental = null;
+    if (quote.rental_id) {
+      const { data: rentalRow, error: rentalErr } = await supabase
+        .from('rentals')
+        .select('id, status, reference_code, title, type, start_date, end_date, location, client_id, total_price, color, clients(name)')
+        .eq('id', quote.rental_id)
+        .maybeSingle();
+      if (rentalErr) throw rentalErr;
+      rental = rentalRow;
+    }
+    const ownerClientId = quote.client_id || rental?.client_id;
+    if (ownerClientId !== clientId) return res.status(403).json({ error: 'acces_refuse' });
+
+    // Only allow signing if not already finalised
+    const finalStatuses = ['accepted', 'rejected', 'invoiced', 'expired'];
+    if (finalStatuses.includes(quote.quote_status)) {
+      return res.status(409).json({ error: 'devis_deja_traite' });
+    }
+
+    const now = new Date();
+    const nowIso = now.toISOString();
+
+    // Audit trail metadata
+    const forwardedFor = req.headers['x-forwarded-for'];
+    const responseIp = Array.isArray(forwardedFor)
+      ? (forwardedFor[0] || '').trim()
+      : typeof forwardedFor === 'string'
+        ? forwardedFor.split(',')[0].trim()
+        : (req.socket?.remoteAddress || null);
+    const responseUserAgent = req.headers['user-agent'] || null;
+
+    // Update quote_status on the invoice
+    const newQuoteStatus = decision === 'accept'
+      ? 'accepted'
+      : decision === 'refuse'
+        ? 'rejected'
+        : (quote.quote_status || 'sent'); // modification: keep current status
+    const { error: updateQuoteErr } = await supabase
+      .from('invoices')
+      .update({ quote_status: newQuoteStatus })
+      .eq('id', quoteId);
+    if (updateQuoteErr) throw updateQuoteErr;
+
+    // Side effects based on decision
+    if (decision === 'accept' && rental?.status === 'pending') {
+      try {
+        const amount_ttc = roundCurrencyValue(Number(rental.total_price || 0));
+        await ensureRentalDraftInvoiceForAcceptance({
+          rentalId: rental.id,
+          clientId: rental.client_id || null,
+          referenceCode: rental.reference_code || null,
+          amountTTC: amount_ttc,
+          note: `Générée après acceptation du devis via l'espace client.`,
+        });
+      } catch (e) {
+        console.warn('[portal/sign] ensureRentalDraftInvoice:', e?.message);
+      }
+      await supabase.from('rentals')
+        .update({ status: 'confirmed', generate_invoice: true })
+        .eq('id', rental.id);
+    } else if (decision === 'refuse' && rental?.status === 'pending') {
+      await supabase.from('rentals').update({
+        status: 'cancelled',
+        status_before_cancellation: rental.status,
+        cancellation_reason: 'Refusé par le client (espace client)',
+      }).eq('id', rental.id);
+    }
+
+    // Best-effort: mark any pending email approval request as answered too
+    if (rental) {
+      await supabase
+        .from('rental_document_requests')
+        .update({
+          status: decision === 'accept' ? 'accepted' : decision === 'refuse' ? 'refused' : 'modification_requested',
+          responded_at: nowIso,
+          signer_name: signerName,
+          consent_text: APPROVAL_CONSENT_TEXT,
+          consented_at: nowIso,
+          response_ip: responseIp,
+          response_user_agent: responseUserAgent,
+          modification_comment: decision === 'modification' ? (comment || null) : null,
+        })
+        .eq('rental_id', rental.id)
+        .eq('status', 'pending')
+        .then(() => {}).catch(() => {});
+    }
+
+    // Activity log
+    const logDetails = decision === 'accept'
+      ? 'Devis accepté via l\'espace client (signature électronique simple).'
+      : decision === 'refuse'
+        ? 'Devis refusé via l\'espace client.'
+        : `Modification demandée via l'espace client.${comment ? ` — « ${comment} »` : ''}`;
+    if (rental) {
+      await insertRentalActivityLog({
+        rentalId: rental.id,
+        actorName: signerName,
+        action: decision === 'accept' ? 'status_confirmed' : decision === 'refuse' ? 'status_rejected' : 'document_modification_requested',
+        details: logDetails,
+        metadata: {
+          via: 'portal',
+          signer_name: signerName,
+          consented_at: nowIso,
+          consent_text: APPROVAL_CONSENT_TEXT,
+          response_ip: responseIp,
+          response_user_agent: responseUserAgent,
+        },
+      }).catch(() => {});
+    }
+
+    // Notify admin team
+    if (rental) {
+      await notifyQuoteDecision({
+        rental,
+        decision,
+        actorName: signerName,
+        requestId: null,
+        respondedAt: nowIso,
+        modificationComment: decision === 'modification' ? (comment || null) : null,
+      }).catch(() => {});
+    }
+
+    return res.json({ ok: true, quote_status: newQuoteStatus });
+  } catch (err) {
+    console.error('[client-portal/quotes/sign]', err);
+    return res.status(500).json({ error: 'sign_failed' });
+  }
+});
+
+// ── GET /invoices — list invoices for authenticated client
+app.get('/api/client-portal/invoices', async (req, res) => {
+  if (!isSupabaseReady()) return res.status(503).json({ error: 'supabase_not_ready' });
+  try {
+    const session = await cpVerifySession(req);
+    if (!session) return res.status(401).json({ error: 'session_invalide' });
+    const clientId = session.client_portal_accounts.client_id;
+
+    const { data: clientRow } = await supabase
+      .from('clients')
+      .select('company_client_id')
+      .eq('id', clientId)
+      .maybeSingle();
+    const clientIds = [clientId];
+    if (clientRow?.company_client_id) clientIds.push(clientRow.company_client_id);
+
+    // Fetch client's rental IDs to also find docs linked by rental_id
+    const { data: clientRentals } = await supabase
+      .from('rentals')
+      .select('id')
+      .in('client_id', clientIds);
+    const rentalIds = (clientRentals || []).map((r) => r.id);
+
+    const SELECT_COLS = 'id, invoice_number, document_type, status, amount_ht, amount_ttc, vat_amount, due_date, paid_date, created_at, rental_id, client_id';
+    const DOC_TYPES = ['invoice', 'deposit_invoice'];
+
+    const [byClient, byRental] = await Promise.all([
+      supabase
+        .from('invoices')
+        .select(SELECT_COLS)
+        .in('client_id', clientIds)
+        .in('document_type', DOC_TYPES)
+        .neq('status', 'draft')
+        .order('created_at', { ascending: false }),
+      rentalIds.length > 0
+        ? supabase
+            .from('invoices')
+            .select(SELECT_COLS)
+            .in('rental_id', rentalIds)
+            .in('document_type', DOC_TYPES)
+            .neq('status', 'draft')
+            .order('created_at', { ascending: false })
+        : Promise.resolve({ data: [] }),
+    ]);
+
+    if (byClient.error) throw byClient.error;
+
+    const seen = new Set();
+    const invoices = [...(byClient.data || []), ...(byRental.data || [])].filter((d) => {
+      if (seen.has(d.id)) return false;
+      seen.add(d.id);
+      return true;
+    });
+    invoices.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+    return res.json({ ok: true, invoices });
+  } catch (err) {
+    console.error('[client-portal/invoices]', err);
+    return res.status(500).json({ error: 'fetch_failed' });
+  }
+});
+
+// ── GET /invoices/:id/pdf — proxy PDF for authenticated client
+app.get('/api/client-portal/invoices/:id/pdf', async (req, res) => {
+  if (!isSupabaseReady()) return res.status(503).json({ error: 'supabase_not_ready' });
+  try {
+    const session = await cpVerifySession(req);
+    if (!session) return res.status(401).json({ error: 'session_invalide' });
+    const clientId = session.client_portal_accounts.client_id;
+    const invoiceId = req.params.id;
+    if (!UUID_REGEX.test(invoiceId)) return res.status(400).json({ error: 'id_invalide' });
+
+    const { data: clientRow } = await supabase
+      .from('clients')
+      .select('company_client_id')
+      .eq('id', clientId)
+      .maybeSingle();
+    const allowedIds = [clientId];
+    if (clientRow?.company_client_id) allowedIds.push(clientRow.company_client_id);
+
+    // Verify ownership before returning PDF
+    const { data: inv } = await supabase
+      .from('invoices')
+      .select('id, client_id')
+      .eq('id', invoiceId)
+      .in('client_id', allowedIds)
+      .maybeSingle();
+    if (!inv) return res.status(403).json({ error: 'access_denied' });
+
+    // Forward to internal PDF route by proxying the request internally
+    const internalUrl = `http://localhost:${process.env.PORT || 3001}/api/invoices/${invoiceId}/pdf`;
+    const http = await import('http');
+    const proxyReq = http.request(internalUrl, { method: 'GET' }, (proxyRes) => {
+      res.setHeader('Content-Type', proxyRes.headers['content-type'] || 'application/pdf');
+      res.setHeader('Content-Disposition', proxyRes.headers['content-disposition'] || `attachment; filename="facture-${invoiceId}.pdf"`);
+      proxyRes.pipe(res);
+    });
+    proxyReq.on('error', (e) => {
+      console.error('[client-portal/invoices/pdf proxy]', e);
+      res.status(500).json({ error: 'pdf_failed' });
+    });
+    proxyReq.end();
+  } catch (err) {
+    console.error('[client-portal/invoices/:id/pdf]', err);
+    return res.status(500).json({ error: 'pdf_failed' });
+  }
+});
+
+// ── GET /projects — list rentals for authenticated client
+app.get('/api/client-portal/projects', async (req, res) => {
+  if (!isSupabaseReady()) return res.status(503).json({ error: 'supabase_not_ready' });
+  try {
+    const session = await cpVerifySession(req);
+    if (!session) return res.status(401).json({ error: 'session_invalide' });
+    const clientId = session.client_portal_accounts.client_id;
+
+    // Get company id if any
+    const { data: clientRow } = await supabase
+      .from('clients')
+      .select('company_client_id')
+      .eq('id', clientId)
+      .single();
+    const companyClientId = clientRow?.company_client_id || null;
+
+    const RENTAL_COLS = 'id, title, status, start_date, end_date, location, total_price, created_at';
+
+    // Direct rentals where client is the main client
+    const { data: directRentals, error: directErr } = await supabase
+      .from('rentals')
+      .select(RENTAL_COLS)
+      .eq('client_id', clientId)
+      .order('start_date', { ascending: false });
+
+    if (directErr) throw directErr;
+
+    // Rentals via company membership where client_represents_company = true
+    let companyRentals = [];
+    if (companyClientId) {
+      const { data: memberRentals } = await supabase
+        .from('rental_members')
+        .select('rental_id')
+        .eq('client_id', clientId)
+        .eq('client_represents_company', true);
+
+      if (memberRentals && memberRentals.length > 0) {
+        const rentalIds = memberRentals.map((m) => m.rental_id);
+        const { data: rents, error: rentsErr } = await supabase
+          .from('rentals')
+          .select(RENTAL_COLS)
+          .in('id', rentalIds)
+          .order('start_date', { ascending: false });
+        if (rentsErr) throw rentsErr;
+        companyRentals = rents || [];
+      }
+    }
+
+    // Merge + deduplicate
+    const seen = new Set();
+    const allRentals = [...(directRentals || []), ...companyRentals].filter((r) => {
+      if (seen.has(r.id)) return false;
+      seen.add(r.id);
+      return true;
+    });
+
+    allRentals.sort((a, b) => {
+      const aDate = a.start_date ? new Date(a.start_date).getTime() : 0;
+      const bDate = b.start_date ? new Date(b.start_date).getTime() : 0;
+      return bDate - aDate;
+    });
+
+    return res.json({ projects: allRentals });
+  } catch (err) {
+    console.error('[client-portal/projects]', err);
+    return res.status(500).json({ error: 'server_error' });
+  }
+});
+
+// ── GET /summary — light summary for the home page
+app.get('/api/client-portal/summary', async (req, res) => {
+  if (!isSupabaseReady()) return res.status(503).json({ error: 'supabase_not_ready' });
+  try {
+    const session = await cpVerifySession(req);
+    if (!session) return res.status(401).json({ error: 'session_invalide' });
+    const clientId = session.client_portal_accounts.client_id;
+
+    const { data: clientRow } = await supabase
+      .from('clients')
+      .select('company_client_id')
+      .eq('id', clientId)
+      .single();
+    const companyClientId = clientRow?.company_client_id || null;
+
+    // Build the set of client ids whose docs we can access
+    const clientIds = [clientId];
+    if (companyClientId) clientIds.push(companyClientId);
+
+    // Pending quotes (sent but not yet accepted/declined)
+    const { data: pendingQuotes } = await supabase
+      .from('invoices')
+      .select('id')
+      .eq('document_type', 'quote')
+      .in('quote_status', ['sent', 'none'])
+      .neq('status', 'draft')
+      .in('client_id', clientIds);
+
+    // Unpaid invoices
+    const { data: unpaidInvoices } = await supabase
+      .from('invoices')
+      .select('amount_ttc')
+      .in('document_type', ['invoice', 'deposit_invoice'])
+      .in('status', ['sent', 'overdue'])
+      .in('client_id', clientIds);
+
+    const unpaidAmount = (unpaidInvoices || []).reduce((s, i) => s + (i.amount_ttc || 0), 0);
+
+    // Active projects
+    const { data: activeRentals } = await supabase
+      .from('rentals')
+      .select('id, start_date, status')
+      .eq('client_id', clientId)
+      .in('status', ['confirmed', 'in_progress']);
+
+    const now = new Date();
+    const upcoming = (activeRentals || []).filter(
+      (r) => r.start_date && new Date(r.start_date) > now
+    ).length;
+
+    return res.json({
+      invoices: { total: 0, unpaid_amount: unpaidAmount },
+      quotes:   { pending: (pendingQuotes || []).length },
+      projects: { active: (activeRentals || []).length, upcoming },
+    });
+  } catch (err) {
+    console.error('[client-portal/summary]', err);
+    return res.status(500).json({ error: 'server_error' });
+  }
+});
+
+// ── GET /projects/:id — project detail for authenticated client
+app.get('/api/client-portal/projects/:id', async (req, res) => {
+  if (!isSupabaseReady()) return res.status(503).json({ error: 'supabase_not_ready' });
+  try {
+    const session = await cpVerifySession(req);
+    if (!session) return res.status(401).json({ error: 'session_invalide' });
+    const clientId = session.client_portal_accounts.client_id;
+    const rentalId = req.params.id;
+    if (!UUID_REGEX.test(rentalId)) return res.status(400).json({ error: 'id_invalide' });
+
+    const { data: clientRow } = await supabase
+      .from('clients')
+      .select('company_client_id')
+      .eq('id', clientId)
+      .maybeSingle();
+    const clientIds = [clientId];
+    if (clientRow?.company_client_id) clientIds.push(clientRow.company_client_id);
+
+    // Security: verify this rental belongs to the client (direct or via member)
+    const { data: rental, error: rentalErr } = await supabase
+      .from('rentals')
+      .select(`
+        id, reference_code, title, type, status,
+        start_date, end_date, location,
+        delivery_address, pickup_address,
+        description, notes,
+        total_price, created_at
+      `)
+      .eq('id', rentalId)
+      .in('client_id', clientIds)
+      .maybeSingle();
+
+    // Also allow if client is a member with client_represents_company
+    let authorized = !!rental;
+    if (!authorized) {
+      const { data: membership } = await supabase
+        .from('rental_members')
+        .select('rental_id')
+        .eq('rental_id', rentalId)
+        .eq('client_id', clientId)
+        .maybeSingle();
+      if (membership) {
+        const { data: r2 } = await supabase
+          .from('rentals')
+          .select(`
+            id, reference_code, title, type, status,
+            start_date, end_date, location,
+            delivery_address, pickup_address,
+            description, notes,
+            total_price, created_at
+          `)
+          .eq('id', rentalId)
+          .maybeSingle();
+        if (r2) { authorized = true; Object.assign(rental || {}, r2); }
+      }
+    }
+
+    if (!authorized || !rental) return res.status(403).json({ error: 'access_denied' });
+
+    // Fetch related data in parallel
+    const [itemsRes, groupsRes, affectationRes, docsRes] = await Promise.all([
+      supabase
+        .from('rental_items')
+        .select('id, quantity, price_per_day, group_id, position, is_external, external_name, external_type, equipment:equipment_id(id, name, type)')
+        .eq('rental_id', rentalId)
+        .order('position', { ascending: true }),
+      supabase
+        .from('rental_item_groups')
+        .select('id, name, position, color')
+        .eq('rental_id', rentalId)
+        .order('position', { ascending: true }),
+      supabase
+        .from('rental_affectation')
+        .select('personnel_id, personnel:personnel_id(id, first_name, last_name, role)')
+        .eq('rental_id', rentalId),
+      supabase
+        .from('invoices')
+        .select('id, invoice_number, document_type, status, quote_status, amount_ttc, due_date, created_at')
+        .eq('rental_id', rentalId)
+        .neq('status', 'cancelled')
+        .order('created_at', { ascending: false }),
+    ]);
+
+    return res.json({
+      rental,
+      items: itemsRes.data || [],
+      groups: groupsRes.data || [],
+      personnel: (affectationRes.data || [])
+        .map((a) => a.personnel)
+        .filter(Boolean),
+      documents: docsRes.data || [],
+    });
+  } catch (err) {
+    console.error('[client-portal/projects/:id]', err);
+    return res.status(500).json({ error: 'server_error' });
+  }
+});
+
+// ── DELETE logout
+app.post('/api/client-portal/logout', async (req, res) => {
+  if (!isSupabaseReady()) return res.status(503).json({ error: 'supabase_not_ready' });
+  try {
+    const auth = req.headers.authorization || '';
+    const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : null;
+    if (token) await supabase.from('client_portal_sessions').delete().eq('token', token);
+    return res.json({ ok: true });
+  } catch {
+    return res.json({ ok: true });
+  }
+});
+
+// Public equipment list (client portal)
+app.get('/api/client-portal/public-equipment', async (req, res) => {
+  if (!isSupabaseReady()) return res.status(503).json({ error: 'supabase_not_ready' });
+  try {
+    const session = await cpVerifySession(req);
+    if (!session) return res.status(401).json({ error: 'non_autorise' });
+    const { data, error } = await supabase
+      .from('equipment')
+      .select('id, name, type, subtype, description, image_url, rental_price_ht, rental_price_ttc')
+      .eq('is_public', true)
+      .order('name');
+    if (error) throw error;
+    return res.json(data || []);
+  } catch (err) {
+    console.error('[client-portal/public-equipment]', err);
+    return res.status(500).json({ error: 'server_error' });
+  }
+});
+
+// Create project request (client portal)
+app.post('/api/client-portal/requests', async (req, res) => {
+  if (!isSupabaseReady()) return res.status(503).json({ error: 'supabase_not_ready' });
+  try {
+    const session = await cpVerifySession(req);
+    if (!session) return res.status(401).json({ error: 'non_autorise' });
+    const { start_date, end_date, message, equipment_items, project_type } = req.body;
+    if (!start_date || !end_date) return res.status(400).json({ error: 'dates_requises' });
+    if (!Array.isArray(equipment_items) || equipment_items.length === 0)
+      return res.status(400).json({ error: 'materiel_requis' });
+    const validTypes = ['rental', 'service'];
+    const safeType = validTypes.includes(project_type) ? project_type : null;
+    const { data, error } = await supabase
+      .from('client_portal_requests')
+      .insert({
+        client_id: session.client_portal_accounts.client_id,
+        start_date,
+        end_date,
+        message: message || null,
+        equipment_items,
+        project_type: safeType,
+      })
+      .select()
+      .single();
+    if (error) throw error;
+    sendPortalRequestNotification({
+      clientId: session.client_portal_accounts.client_id,
+      startDate: start_date,
+      endDate: end_date,
+      itemCount: equipment_items.length,
+    }).catch(() => {});
+    return res.json(data);
+  } catch (err) {
+    console.error('[client-portal/requests POST]', err);
+    return res.status(500).json({ error: 'server_error' });
+  }
+});
+
+// List own requests (client portal)
+app.get('/api/client-portal/requests', async (req, res) => {
+  if (!isSupabaseReady()) return res.status(503).json({ error: 'supabase_not_ready' });
+  try {
+    const session = await cpVerifySession(req);
+    if (!session) return res.status(401).json({ error: 'non_autorise' });
+    const { data, error } = await supabase
+      .from('client_portal_requests')
+      .select('*')
+      .eq('client_id', session.client_portal_accounts.client_id)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return res.json(data || []);
+  } catch (err) {
+    console.error('[client-portal/requests GET]', err);
+    return res.status(500).json({ error: 'server_error' });
+  }
+});
+
+// Admin: list all portal requests
+app.get('/api/portal-requests', async (req, res) => {
+  if (!isSupabaseReady()) return res.status(503).json({ error: 'supabase_not_ready' });
+  try {
+    const { data, error } = await supabase
+      .from('client_portal_requests')
+      .select('*, clients(id, name, email)')
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return res.json(data || []);
+  } catch (err) {
+    console.error('[portal-requests GET]', err);
+    return res.status(500).json({ error: 'server_error' });
+  }
+});
+
+// Admin: convert request to rental
+app.post('/api/portal-requests/:id/convert', async (req, res) => {
+  if (!isSupabaseReady()) return res.status(503).json({ error: 'supabase_not_ready' });
+  try {
+    const { id } = req.params;
+    const { data: reqData, error: reqErr } = await supabase
+      .from('client_portal_requests')
+      .select('*')
+      .eq('id', id)
+      .single();
+    if (reqErr || !reqData) return res.status(404).json({ error: 'demande_introuvable' });
+    if (reqData.status !== 'pending') return res.status(400).json({ error: 'demande_deja_traitee' });
+
+    // Create rental with base columns only (portal metadata columns added best-effort below)
+    const { data: rental, error: rentalErr } = await supabase
+      .from('rentals')
+      .insert({
+        client_id: reqData.client_id,
+        start_date: reqData.start_date,
+        end_date: reqData.end_date,
+        type: reqData.project_type || 'rental',
+        status: 'pending',
+        notes: reqData.message || null,
+      })
+      .select()
+      .single();
+    if (rentalErr) throw rentalErr;
+
+    // Best-effort: set portal link columns if migration has been applied
+    await supabase
+      .from('rentals')
+      .update({ portal_request_id: id, portal_validated: false })
+      .eq('id', rental.id)
+      .then(() => {})
+      .catch(() => {});
+
+    // Mark request as converted
+    const { error: convertErr } = await supabase
+      .from('client_portal_requests')
+      .update({ status: 'converted', converted_at: new Date().toISOString(), rental_id: rental.id })
+      .eq('id', id);
+    if (convertErr) throw convertErr;
+
+    return res.json({ rental_id: rental.id });
+  } catch (err) {
+    console.error('[portal-requests/convert]', err);
+    return res.status(500).json({ error: 'server_error' });
+  }
+});
+
+// Admin: reject request
+app.post('/api/portal-requests/:id/reject', async (req, res) => {
+  if (!isSupabaseReady()) return res.status(503).json({ error: 'supabase_not_ready' });
+  try {
+    const { id } = req.params;
+    const { error } = await supabase
+      .from('client_portal_requests')
+      .update({ status: 'rejected' })
+      .eq('id', id)
+      .eq('status', 'pending');
+    if (error) throw error;
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error('[portal-requests/reject]', err);
+    return res.status(500).json({ error: 'server_error' });
+  }
+});
+
+// Admin: validate portal rental (pricing approved)
+app.post('/api/portal-requests/rental/:rentalId/validate', async (req, res) => {
+  if (!isSupabaseReady()) return res.status(503).json({ error: 'supabase_not_ready' });
+  try {
+    const { rentalId } = req.params;
+    const { validated_by_id, notes } = req.body;
+    const { error } = await supabase
+      .from('rentals')
+      .update({
+        portal_validated: true,
+        portal_validated_at: new Date().toISOString(),
+        portal_validated_by_id: validated_by_id || null,
+        portal_validation_notes: notes || null,
+      })
+      .eq('id', rentalId);
+    if (error) throw error;
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error('[portal-requests/validate]', err);
+    return res.status(500).json({ error: 'server_error' });
   }
 });
 
@@ -5578,6 +6899,93 @@ app.post('/api/profile/avatar', async (req, res) => {
     console.error('[profile/avatar] unexpected error', err);
     const message = err instanceof Error ? err.message : 'Erreur inattendue';
     return res.status(500).json({ error: message });
+  }
+});
+
+// ── GET equipment availability for a date range
+// Query params: start (YYYY-MM-DD), end (YYYY-MM-DD), ids (comma-separated UUIDs)
+// Optional: exclude_rental (UUID) — excludes a rental's own items from the reserved count
+app.get('/api/equipment/availability', async (req, res) => {
+  if (!isSupabaseReady()) return res.status(503).json({ error: 'supabase_not_ready' });
+  try {
+    const { start, end, ids, exclude_rental } = req.query;
+    if (!start || !end || !ids) return res.status(400).json({ error: 'missing_params' });
+
+    const equipmentIds = String(ids).split(',').map(s => s.trim()).filter(Boolean).slice(0, 200);
+    if (equipmentIds.length === 0) return res.json({});
+
+    // Total stock per equipment (summed across all warehouse locations)
+    const { data: stockRows, error: stockErr } = await supabase
+      .from('equipment_stock')
+      .select('equipment_id, quantity')
+      .in('equipment_id', equipmentIds);
+    if (stockErr) throw stockErr;
+
+    const totalByEq = {};
+    (stockRows || []).forEach(r => {
+      totalByEq[r.equipment_id] = (totalByEq[r.equipment_id] || 0) + Number(r.quantity || 0);
+    });
+
+    // All rental_items whose rental overlaps [start, end] and isn't done/cancelled
+    const { data: reservations, error: resErr } = await supabase
+      .from('rental_items')
+      .select('equipment_id, quantity, rentals!inner(id, start_date, end_date, status)')
+      .in('equipment_id', equipmentIds)
+      .not('rentals.status', 'in', '("cancelled","archived","returned","completed","paid")')
+      .lte('rentals.start_date', String(end))
+      .gte('rentals.end_date', String(start));
+    if (resErr) throw resErr;
+
+    // Optionally exclude current rental (when checking from within an existing rental)
+    const filtered = exclude_rental
+      ? (reservations || []).filter(r => r.rentals.id !== String(exclude_rental))
+      : (reservations || []);
+
+    // Build per-day reservation map to find peak overlap
+    const days = [];
+    let cur = new Date(String(start) + 'T12:00:00Z');
+    const endDay = new Date(String(end) + 'T12:00:00Z');
+    while (cur <= endDay && days.length < 366) {
+      days.push(cur.toISOString().slice(0, 10));
+      cur = new Date(cur.getTime() + 86400000);
+    }
+
+    const reservedByEqDay = {};
+    for (const item of filtered) {
+      const eqId = item.equipment_id;
+      const rs = item.rentals.start_date;
+      const re = item.rentals.end_date;
+      const qty = Number(item.quantity || 0);
+      if (!reservedByEqDay[eqId]) reservedByEqDay[eqId] = {};
+      for (const day of days) {
+        if (day >= rs && day <= re) {
+          reservedByEqDay[eqId][day] = (reservedByEqDay[eqId][day] || 0) + qty;
+        }
+      }
+    }
+
+    // Build result: available = total_stock - peak_reserved_any_day
+    const result = {};
+    for (const id of equipmentIds) {
+      const total = totalByEq[id];
+      if (total === undefined) {
+        result[id] = { total: null, reserved: null, available: null };
+        continue;
+      }
+      const dayMap = reservedByEqDay[id] || {};
+      const vals = Object.values(dayMap);
+      const maxReserved = vals.length > 0 ? Math.max(...vals) : 0;
+      result[id] = {
+        total,
+        reserved: maxReserved,
+        available: Math.max(0, total - maxReserved),
+      };
+    }
+
+    return res.json(result);
+  } catch (err) {
+    console.error('[equipment/availability]', err);
+    return res.status(500).json({ error: 'server_error' });
   }
 });
 
@@ -8807,7 +10215,450 @@ app.get('/api/invoices/:id/pdf-generic', async (req, res) => {
   }
 });
 
+// ─────────────────────────────────────────────
+//  CREW PLANNING
+// ─────────────────────────────────────────────
+
+// GET /api/crew-roles
+app.get('/api/crew-roles', async (req, res) => {
+  if (!isSupabaseReady()) return res.status(503).json({ error: 'supabase_not_ready' });
+  try {
+    const { data, error } = await supabase
+      .from('rental_crew_roles')
+      .select('id, name, code, color, default_payment_model, sort_order')
+      .order('sort_order');
+    if (error) throw error;
+    return res.json(data || []);
+  } catch (err) {
+    console.error('[crew-roles]', err);
+    return res.status(500).json({ error: 'server_error' });
+  }
+});
+
+// GET /api/personnel-list — active users for crew picker
+app.get('/api/personnel-list', async (req, res) => {
+  if (!isSupabaseReady()) return res.status(503).json({ error: 'supabase_not_ready' });
+  try {
+    // personnel is a VIEW on app_users + app_user_hr that exposes first_name, last_name, role, status
+    const { data, error } = await supabase
+      .from('personnel')
+      .select('id, first_name, last_name, role, avatar_url, status')
+      .eq('status', 'active')
+      .order('first_name');
+    if (error) throw error;
+
+    // Fetch HR rates separately
+    const ids = (data || []).map(p => p.id);
+    const { data: hrData } = ids.length
+      ? await supabase.from('app_user_hr').select('user_id, payment_model, default_hourly_rate, default_day_rate, default_cachet_rate').in('user_id', ids)
+      : { data: [] };
+    const hrMap = Object.fromEntries((hrData || []).map(h => [h.user_id, h]));
+
+    return res.json((data || []).map(p => ({ ...p, app_user_hr: hrMap[p.id] ?? null })));
+  } catch (err) {
+    console.error('[personnel-list]', err);
+    return res.status(500).json({ error: 'server_error' });
+  }
+});
+
+// GET /api/rentals/:rentalId/crew — list crew for a rental
+app.get('/api/rentals/:rentalId/crew', async (req, res) => {
+  if (!isSupabaseReady()) return res.status(503).json({ error: 'supabase_not_ready' });
+  try {
+    const { rentalId } = req.params;
+    const { data: assignments, error } = await supabase
+      .from('rental_crew_assignments')
+      .select('id, rental_id, personnel_id, crew_role_id, assignment_status, planned_start_at, planned_end_at, planned_break_minutes, workload_percent, expected_payment_model, expected_hourly_rate, expected_day_rate, expected_days, expected_hours, expected_gross_amount, expected_total_cost, notes, created_at')
+      .eq('rental_id', rentalId)
+      .neq('assignment_status', 'cancelled')
+      .order('planned_start_at', { nullsFirst: true });
+    if (error) throw error;
+
+    const personnelIds = [...new Set((assignments || []).map(a => a.personnel_id).filter(Boolean))];
+    const roleIds = [...new Set((assignments || []).map(a => a.crew_role_id).filter(Boolean))];
+
+    const [personnelRes, rolesRes] = await Promise.all([
+      personnelIds.length
+        ? supabase.from('personnel').select('id, first_name, last_name, avatar_url').in('id', personnelIds)
+        : { data: [] },
+      roleIds.length
+        ? supabase.from('rental_crew_roles').select('id, name, code, color').in('id', roleIds)
+        : { data: [] },
+    ]);
+
+    const personnelMap = Object.fromEntries((personnelRes.data || []).map(p => [p.id, p]));
+    const rolesMap = Object.fromEntries((rolesRes.data || []).map(r => [r.id, r]));
+
+    const result = (assignments || []).map(a => ({
+      ...a,
+      personnel: a.personnel_id ? (personnelMap[a.personnel_id] || null) : null,
+      crew_role: a.crew_role_id ? (rolesMap[a.crew_role_id] || null) : null,
+    }));
+
+    return res.json(result);
+  } catch (err) {
+    console.error('[rentals/crew GET]', err);
+    return res.status(500).json({ error: 'server_error' });
+  }
+});
+
+// POST /api/rentals/:rentalId/crew — add crew assignment
+app.post('/api/rentals/:rentalId/crew', async (req, res) => {
+  if (!isSupabaseReady()) return res.status(503).json({ error: 'supabase_not_ready' });
+  try {
+    const { rentalId } = req.params;
+    const {
+      personnel_id, crew_role_id, planned_start_at, planned_end_at,
+      planned_break_minutes, expected_payment_model,
+      expected_hourly_rate, expected_day_rate, expected_days, expected_hours, notes,
+    } = req.body || {};
+
+    if (!personnel_id) return res.status(400).json({ error: 'personnel_id_required' });
+
+    let expected_gross_amount = null;
+    if (expected_payment_model === 'daily' && expected_day_rate && expected_days) {
+      expected_gross_amount = Number(expected_day_rate) * Number(expected_days);
+    } else if (expected_payment_model === 'hourly' && expected_hourly_rate && expected_hours) {
+      expected_gross_amount = Number(expected_hourly_rate) * Number(expected_hours);
+    }
+
+    const { data, error } = await supabase
+      .from('rental_crew_assignments')
+      .insert({
+        rental_id: rentalId,
+        personnel_id,
+        crew_role_id: crew_role_id || null,
+        assignment_status: 'draft',
+        planned_start_at: planned_start_at || null,
+        planned_end_at: planned_end_at || null,
+        planned_break_minutes: planned_break_minutes || null,
+        expected_payment_model: expected_payment_model || null,
+        expected_hourly_rate: expected_hourly_rate || null,
+        expected_day_rate: expected_day_rate || null,
+        expected_days: expected_days || null,
+        expected_hours: expected_hours || null,
+        expected_gross_amount: expected_gross_amount || null,
+        notes: notes || null,
+      })
+      .select()
+      .single();
+    if (error) {
+      if (error.code === '23505') return res.status(409).json({ error: 'already_assigned' });
+      throw error;
+    }
+
+    const [personnelRes, roleRes] = await Promise.all([
+      supabase.from('personnel').select('id, first_name, last_name, avatar_url').eq('id', personnel_id).maybeSingle(),
+      crew_role_id ? supabase.from('rental_crew_roles').select('id, name, code, color').eq('id', crew_role_id).maybeSingle() : { data: null },
+    ]);
+
+    return res.json({ ...data, personnel: personnelRes.data || null, crew_role: roleRes.data || null });
+  } catch (err) {
+    console.error('[rentals/crew POST]', err);
+    return res.status(500).json({ error: 'server_error' });
+  }
+});
+
+// PATCH /api/crew-assignments/:id — update status / dates / notes
+app.patch('/api/crew-assignments/:id', async (req, res) => {
+  if (!isSupabaseReady()) return res.status(503).json({ error: 'supabase_not_ready' });
+  try {
+    const { id } = req.params;
+    const {
+      assignment_status, planned_start_at, planned_end_at, crew_role_id,
+      expected_payment_model, expected_hourly_rate, expected_day_rate,
+      expected_days, expected_hours, notes,
+    } = req.body || {};
+
+    const updates = {};
+    if (assignment_status !== undefined) updates.assignment_status = assignment_status;
+    if (planned_start_at !== undefined) updates.planned_start_at = planned_start_at;
+    if (planned_end_at !== undefined) updates.planned_end_at = planned_end_at;
+    if (crew_role_id !== undefined) updates.crew_role_id = crew_role_id;
+    if (expected_payment_model !== undefined) updates.expected_payment_model = expected_payment_model;
+    if (expected_hourly_rate !== undefined) updates.expected_hourly_rate = expected_hourly_rate;
+    if (expected_day_rate !== undefined) updates.expected_day_rate = expected_day_rate;
+    if (expected_days !== undefined) updates.expected_days = expected_days;
+    if (expected_hours !== undefined) updates.expected_hours = expected_hours;
+    if (notes !== undefined) updates.notes = notes;
+
+    const pm = updates.expected_payment_model;
+    if (pm === 'daily' && updates.expected_day_rate && updates.expected_days) {
+      updates.expected_gross_amount = Number(updates.expected_day_rate) * Number(updates.expected_days);
+    } else if (pm === 'hourly' && updates.expected_hourly_rate && updates.expected_hours) {
+      updates.expected_gross_amount = Number(updates.expected_hourly_rate) * Number(updates.expected_hours);
+    }
+
+    const { data, error } = await supabase
+      .from('rental_crew_assignments')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) throw error;
+    return res.json(data);
+  } catch (err) {
+    console.error('[crew-assignments PATCH]', err);
+    return res.status(500).json({ error: 'server_error' });
+  }
+});
+
+// DELETE /api/crew-assignments/:id — cancel assignment
+app.delete('/api/crew-assignments/:id', async (req, res) => {
+  if (!isSupabaseReady()) return res.status(503).json({ error: 'supabase_not_ready' });
+  try {
+    const { id } = req.params;
+    const { error } = await supabase
+      .from('rental_crew_assignments')
+      .update({ assignment_status: 'cancelled' })
+      .eq('id', id);
+    if (error) throw error;
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error('[crew-assignments DELETE]', err);
+    return res.status(500).json({ error: 'server_error' });
+  }
+});
+
+// GET /api/crew-conflicts — overlapping assignments for a person
+app.get('/api/crew-conflicts', async (req, res) => {
+  if (!isSupabaseReady()) return res.status(503).json({ error: 'supabase_not_ready' });
+  try {
+    const { personnel_id, start, end, exclude_rental } = req.query;
+    if (!personnel_id || !start || !end) return res.status(400).json({ error: 'missing_params' });
+
+    let query = supabase
+      .from('rental_crew_assignments')
+      .select('id, rental_id, planned_start_at, planned_end_at, assignment_status')
+      .eq('personnel_id', String(personnel_id))
+      .not('assignment_status', 'in', '("cancelled")')
+      .lte('planned_start_at', String(end))
+      .gte('planned_end_at', String(start));
+
+    if (exclude_rental) query = query.neq('rental_id', String(exclude_rental));
+
+    const { data, error } = await query;
+    if (error) return res.json([]);
+    return res.json(data || []);
+  } catch (err) {
+    console.error('[crew-conflicts]', err);
+    return res.json([]);
+  }
+});
+
+// ─────────────────────────────────────────────
+//  INCIDENTS (SINISTRES)
+// ─────────────────────────────────────────────
+
+// GET /api/incidents — list all incidents with joins
+app.get('/api/incidents', async (req, res) => {
+  if (!isSupabaseReady()) return res.status(503).json({ error: 'supabase_not_ready' });
+  try {
+    const { status, equipment_id, rental_id } = req.query;
+    let query = supabase
+      .from('equipment_incidents')
+      .select('*, equipment(id, name, reference), rentals(id, reference_code, start_date, end_date), clients(id, name)')
+      .order('created_at', { ascending: false });
+    if (status) query = query.eq('status', String(status));
+    if (equipment_id) query = query.eq('equipment_id', String(equipment_id));
+    if (rental_id) query = query.eq('rental_id', String(rental_id));
+    const { data, error } = await query;
+    if (error) throw error;
+    return res.json(data || []);
+  } catch (err) {
+    console.error('[incidents GET]', err);
+    return res.status(500).json({ error: 'server_error' });
+  }
+});
+
+// GET /api/incidents/:id — single incident with documents
+app.get('/api/incidents/:id', async (req, res) => {
+  if (!isSupabaseReady()) return res.status(503).json({ error: 'supabase_not_ready' });
+  try {
+    const { id } = req.params;
+    const [incidentRes, docsRes] = await Promise.all([
+      supabase
+        .from('equipment_incidents')
+        .select('*, equipment(id, name, reference), rentals(id, reference_code, start_date, end_date, status), clients(id, name, email, phone)')
+        .eq('id', id)
+        .maybeSingle(),
+      supabase
+        .from('incident_documents')
+        .select('*')
+        .eq('incident_id', id)
+        .order('created_at'),
+    ]);
+    if (incidentRes.error) throw incidentRes.error;
+    if (!incidentRes.data) return res.status(404).json({ error: 'not_found' });
+    return res.json({ ...incidentRes.data, documents: docsRes.data || [] });
+  } catch (err) {
+    console.error('[incidents/:id GET]', err);
+    return res.status(500).json({ error: 'server_error' });
+  }
+});
+
+// POST /api/incidents — create incident (optionally creates maintenance task)
+app.post('/api/incidents', async (req, res) => {
+  if (!isSupabaseReady()) return res.status(503).json({ error: 'supabase_not_ready' });
+  try {
+    const {
+      equipment_id, equipment_unit_id, serial_number, equipment_name,
+      rental_id, client_id, client_name,
+      incident_type, severity, title, description, incident_date, location,
+      reported_by, client_liability_percent,
+      repair_estimate, insurance_status, insurance_provider,
+      create_maintenance_task,
+    } = req.body || {};
+
+    if (!incident_type || !title) return res.status(400).json({ error: 'missing_fields' });
+
+    // Create incident
+    const { data: incident, error } = await supabase
+      .from('equipment_incidents')
+      .insert({
+        equipment_id: equipment_id || null,
+        equipment_unit_id: equipment_unit_id || null,
+        serial_number: serial_number || null,
+        equipment_name: equipment_name || null,
+        rental_id: rental_id || null,
+        client_id: client_id || null,
+        client_name: client_name || null,
+        incident_type,
+        severity: severity || 'moderate',
+        status: 'reported',
+        title,
+        description: description || null,
+        incident_date: incident_date || null,
+        location: location || null,
+        reported_by: reported_by || null,
+        client_liability_percent: client_liability_percent ?? 100,
+        repair_estimate: repair_estimate || null,
+        insurance_status: insurance_status || 'not_applicable',
+        insurance_provider: insurance_provider || null,
+      })
+      .select()
+      .single();
+    if (error) throw error;
+
+    // Optionally auto-create a corrective maintenance task
+    if (create_maintenance_task && equipment_id) {
+      const { data: task } = await supabase
+        .from('maintenance_tasks')
+        .insert({
+          equipment_id,
+          type: 'corrective',
+          priority: severity === 'total_loss' || severity === 'severe' ? 'urgent' : severity === 'moderate' ? 'high' : 'medium',
+          title: `[Sinistre] ${title}`,
+          description: description || null,
+          scheduled_date: incident_date || new Date().toISOString().split('T')[0],
+          status: 'pending',
+          cost: repair_estimate || 0,
+        })
+        .select()
+        .single();
+      if (task) {
+        await supabase
+          .from('equipment_incidents')
+          .update({ maintenance_task_id: task.id })
+          .eq('id', incident.id);
+        incident.maintenance_task_id = task.id;
+      }
+    }
+
+    return res.json(incident);
+  } catch (err) {
+    console.error('[incidents POST]', err);
+    return res.status(500).json({ error: 'server_error' });
+  }
+});
+
+// PATCH /api/incidents/:id — update incident
+app.patch('/api/incidents/:id', async (req, res) => {
+  if (!isSupabaseReady()) return res.status(503).json({ error: 'supabase_not_ready' });
+  try {
+    const { id } = req.params;
+    const allowed = [
+      'status','severity','title','description','incident_date','location',
+      'client_liability_percent','repair_estimate','final_cost',
+      'insurance_status','insurance_claim_number','insurance_provider','insurance_coverage_amount',
+      'assessed_at','assessed_by','resolved_at','maintenance_task_id',
+    ];
+    const updates = {};
+    for (const key of allowed) {
+      if (key in (req.body || {})) updates[key] = req.body[key];
+    }
+    // Auto-set timestamps
+    if (updates.status === 'resolved' && !updates.resolved_at) updates.resolved_at = new Date().toISOString();
+    if (updates.status === 'assessed' && !updates.assessed_at) updates.assessed_at = new Date().toISOString();
+
+    const { data, error } = await supabase
+      .from('equipment_incidents')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) throw error;
+    return res.json(data);
+  } catch (err) {
+    console.error('[incidents PATCH]', err);
+    return res.status(500).json({ error: 'server_error' });
+  }
+});
+
+// DELETE /api/incidents/:id — hard delete
+app.delete('/api/incidents/:id', async (req, res) => {
+  if (!isSupabaseReady()) return res.status(503).json({ error: 'supabase_not_ready' });
+  try {
+    const { id } = req.params;
+    const { error } = await supabase.from('equipment_incidents').delete().eq('id', id);
+    if (error) throw error;
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error('[incidents DELETE]', err);
+    return res.status(500).json({ error: 'server_error' });
+  }
+});
+
+// POST /api/incidents/:id/documents — upload document record
+app.post('/api/incidents/:id/documents', async (req, res) => {
+  if (!isSupabaseReady()) return res.status(503).json({ error: 'supabase_not_ready' });
+  try {
+    const { id } = req.params;
+    const { doc_type, title, file_url, uploaded_by } = req.body || {};
+    if (!file_url || !title) return res.status(400).json({ error: 'missing_fields' });
+    const { data, error } = await supabase
+      .from('incident_documents')
+      .insert({ incident_id: id, doc_type: doc_type || 'photo', title, file_url, uploaded_by: uploaded_by || null })
+      .select()
+      .single();
+    if (error) throw error;
+    return res.json(data);
+  } catch (err) {
+    console.error('[incidents/documents POST]', err);
+    return res.status(500).json({ error: 'server_error' });
+  }
+});
+
+// DELETE /api/incidents/:incidentId/documents/:docId
+app.delete('/api/incidents/:incidentId/documents/:docId', async (req, res) => {
+  if (!isSupabaseReady()) return res.status(503).json({ error: 'supabase_not_ready' });
+  try {
+    const { docId } = req.params;
+    const { error } = await supabase.from('incident_documents').delete().eq('id', docId);
+    if (error) throw error;
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error('[incidents/documents DELETE]', err);
+    return res.status(500).json({ error: 'server_error' });
+  }
+});
+
+// ─────────────────────────────────────────────
+
 ensureSupabaseOnBoot();
+
+// Mount public integration API (v1) — requires public_api_keys table in DB
+mountPublicApi(app, supabase);
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => console.log(`PDF API listening on :${PORT}`));

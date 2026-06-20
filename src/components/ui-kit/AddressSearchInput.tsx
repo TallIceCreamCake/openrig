@@ -44,17 +44,33 @@ const AddressSearchInput: React.FC<AddressSearchInputProps> = ({
     setQuery(value);
   }, [value]);
 
-  // Position the portal dropdown right below the input — runs synchronously before paint
-  useLayoutEffect(() => {
+  const positionDropdown = () => {
     if (!open || !containerRef.current || !dropdownRef.current) return;
     const rect = containerRef.current.getBoundingClientRect();
     const el = dropdownRef.current;
+    const dropdownHeight = el.offsetHeight || 230;
+    const spaceBelow = window.innerHeight - rect.bottom - 8;
+    const spaceAbove = rect.top - 8;
+    const placeAbove = spaceBelow < dropdownHeight && spaceAbove > spaceBelow;
     el.style.position = 'fixed';
-    el.style.top = `${rect.bottom + 6}px`;
+    el.style.top = placeAbove ? `${rect.top - dropdownHeight - 6}px` : `${rect.bottom + 6}px`;
     el.style.left = `${rect.left}px`;
     el.style.width = `${rect.width}px`;
     el.style.zIndex = '9999';
-  });
+  };
+
+  // Reposition on every render and on scroll/resize while open
+  useLayoutEffect(() => { positionDropdown(); });
+
+  useEffect(() => {
+    if (!open) return;
+    window.addEventListener('scroll', positionDropdown, true);
+    window.addEventListener('resize', positionDropdown);
+    return () => {
+      window.removeEventListener('scroll', positionDropdown, true);
+      window.removeEventListener('resize', positionDropdown);
+    };
+  }, [open]);
 
   // Close on outside click
   useEffect(() => {

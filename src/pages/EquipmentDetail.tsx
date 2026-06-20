@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, CheckCircle, Edit, Save, Package, Euro, History, Settings, Plus, Trash2, ImagePlus, QrCode, Loader2, X, ListChecks, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, CheckCircle, Edit, Save, Package, Euro, History, Settings, Plus, Trash2, ImagePlus, QrCode, Loader2, X, ListChecks, ShieldCheck, Globe } from 'lucide-react';
 import MaintenanceProcedureWizard from '../components/maintenance/MaintenanceProcedureWizard';
 import toast from 'react-hot-toast';
 import { Equipment } from '../types/equipment';
@@ -119,6 +119,7 @@ type EditableEquipmentFields = {
   subcategory_id: string | null;
   internal_location: string;
   image_url: string;
+  is_public: boolean;
 };
 
 type StockDraftRow = {
@@ -469,6 +470,7 @@ const EquipmentDetail: React.FC = () => {
       subcategory_id: equipment.subcategory_id || null,
       internal_location: equipment.internal_location || '',
       image_url: equipment.image_url || '',
+      is_public: equipment.is_public ?? false,
     });
     categoryAppliedNameRef.current = equipment.type || null;
     subcategoryAppliedNameRef.current = equipment.subtype || null;
@@ -2091,6 +2093,7 @@ const EquipmentDetail: React.FC = () => {
       subcategory_id: formValues.subcategory_id || null,
       internal_location: formValues.internal_location.trim() ? formValues.internal_location.trim() : null,
       image_url: formValues.image_url.trim() ? formValues.image_url.trim() : null,
+      is_public: formValues.is_public,
     };
 
     setIsSavingOverlayVisible(true);
@@ -2715,6 +2718,24 @@ const EquipmentDetail: React.FC = () => {
                             placeholder={t('equipment.detail.edit.placeholders.description')}
                           />
                         </Field>
+                        {companySettings?.features?.client_portal && (
+                          <div className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50/50 px-4 py-3">
+                            <div className="flex items-center gap-2.5">
+                              <Globe className="h-4 w-4 text-emerald-600 flex-shrink-0" />
+                              <div>
+                                <p className="text-sm font-medium text-gray-900">Produit public</p>
+                                <p className="text-xs text-gray-500">Visible dans l'espace client pour les demandes de devis</p>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => updateFormValue('is_public', !formValues.is_public)}
+                              className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${formValues.is_public ? 'bg-emerald-500' : 'bg-gray-200'}`}
+                            >
+                              <span className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform duration-200 ${formValues.is_public ? 'translate-x-4' : 'translate-x-0'}`} />
+                            </button>
+                          </div>
+                        )}
                       </>
                     ) : (
                       <>
@@ -2804,6 +2825,14 @@ const EquipmentDetail: React.FC = () => {
                             {equipment.description?.trim() || t('equipment.detail.view.description.empty')}
                           </Text>
                         </div>
+                        {companySettings?.features?.client_portal && (
+                          <div className="flex items-center gap-2.5">
+                            <Globe className={`h-4 w-4 flex-shrink-0 ${equipment.is_public ? 'text-emerald-500' : 'text-gray-300'}`} />
+                            <span className={`text-sm font-medium ${equipment.is_public ? 'text-emerald-700' : 'text-gray-400'}`}>
+                              {equipment.is_public ? 'Produit public — visible dans l\'espace client' : 'Produit non public'}
+                            </span>
+                          </div>
+                        )}
                       </>
                     )}
 

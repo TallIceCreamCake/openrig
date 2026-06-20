@@ -7,7 +7,7 @@ import { AddressSearchInput, ColorPickerButton, Field, Input, SearchableSelect, 
 
 interface Props {
   rental: Rental;
-  clients: Array<{ id: string; name: string }>;
+  clients: Array<{ id: string; name: string; client_type?: string; company_client_id?: string | null }>;
   onSubmit: (updates: Partial<Rental>) => Promise<void> | void;
   formRef?: React.Ref<HTMLFormElement>;
 }
@@ -36,6 +36,7 @@ const RentalGeneralForm: React.FC<Props> = ({ rental, clients, onSubmit, formRef
     defaultValues: {
       type: rental.type,
       client_id: rental.client_id,
+      client_represents_company: rental.client_represents_company ?? false,
       start_date: toDatetimeLocal(rental.start_date) as any,
       end_date: toDatetimeLocal(rental.end_date) as any,
       usage_start_date: toDatetimeLocal(rental.usage_start_date ?? undefined) as any,
@@ -70,6 +71,7 @@ const RentalGeneralForm: React.FC<Props> = ({ rental, clients, onSubmit, formRef
       discount_value: rental.discount_value,
       color: rental.color,
       generate_invoice: rental.generate_invoice,
+      client_represents_company: rental.client_represents_company ?? false,
     });
   }, [rental.id, reset]);
 
@@ -128,9 +130,18 @@ const RentalGeneralForm: React.FC<Props> = ({ rental, clients, onSubmit, formRef
     return null;
   }, [watchedBillingStart, watchedBillingEnd, watchedUsageStart, watchedUsageEnd]);
 
+  const clientRepresentsCompany = watch('client_represents_company');
+
   const clientOptions = useMemo(
-    () => clients.map((client) => ({ value: client.id, label: client.name })),
+    () => clients
+      .filter((c) => !c.client_type || c.client_type === 'person')
+      .map((client) => ({ value: client.id, label: client.name })),
     [clients]
+  );
+
+  const selectedClientHasCompany = useMemo(
+    () => Boolean(clients.find((c) => c.id === clientId)?.company_client_id),
+    [clients, clientId]
   );
 
   return (
@@ -160,6 +171,18 @@ const RentalGeneralForm: React.FC<Props> = ({ rental, clients, onSubmit, formRef
           />
           <input type="hidden" {...register('client_id', { required: 'Client requis' })} />
           {errors.client_id && <Text as="p" className="text-xs text-red-600">{errors.client_id.message}</Text>}
+          {selectedClientHasCompany && (
+            <label className="mt-2 flex items-center gap-2 text-sm cursor-pointer select-none">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                {...register('client_represents_company')}
+              />
+              <span className={clientRepresentsCompany ? 'text-gray-800 font-medium' : 'text-gray-500'}>
+                Représente son entreprise
+              </span>
+            </label>
+          )}
         </Field>
 
         <Field label="Titre" id="rental-title" className="md:col-span-2">

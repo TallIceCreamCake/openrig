@@ -19,6 +19,7 @@ import PersonnelDetail from './pages/PersonnelDetail';
 import Accounting from './pages/Accounting';
 import Maintenance from './pages/Maintenance';
 import MaintenanceDetail from './pages/MaintenanceDetail';
+import IncidentDetail from './pages/IncidentDetail';
 import SettingsPage from './pages/Settings';
 import CompanySettingsPage from './pages/CompanySettings';
 import TemplateStudio from './pages/TemplateStudio';
@@ -28,6 +29,18 @@ import FirstLoginPage from './pages/FirstLogin';
 import SystemSetupPage from './pages/SystemSetup';
 import SetupDatabasePage from './pages/SetupDatabase';
 import DossierShare from './pages/DossierShare';
+import PortalRequests from './pages/PortalRequests';
+import ClientPortalLogin from './pages/clientportal/ClientPortalLogin';
+import ClientPortalChangePassword from './pages/clientportal/ClientPortalChangePassword';
+import ClientPortalHome from './pages/clientportal/ClientPortalHome';
+import ClientPortalRequest from './pages/clientportal/ClientPortalRequest';
+import ClientPortalProfile from './pages/clientportal/ClientPortalProfile';
+import ClientPortalInvoices from './pages/clientportal/ClientPortalInvoices';
+import ClientPortalQuotes from './pages/clientportal/ClientPortalQuotes';
+import ClientPortalProjects from './pages/clientportal/ClientPortalProjects';
+import ClientPortalPlanning from './pages/clientportal/ClientPortalPlanning';
+import ClientPortalProjectDetail from './pages/clientportal/ClientPortalProjectDetail';
+import ClientPortalDebug from './pages/clientportal/ClientPortalDebug';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Vehicles from './pages/Vehicles';
 import VehicleDetail from './pages/VehicleDetail';
@@ -140,6 +153,17 @@ function App() {
             <SetupGate>
             <Routes>
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/espaceclient" element={<ClientPortalLogin />} />
+              <Route path="/espaceclient/changer-mot-de-passe" element={<ClientPortalChangePassword />} />
+              <Route path="/espaceclient/accueil" element={<ClientPortalHome />} />
+              <Route path="/espaceclient/demande" element={<ClientPortalRequest />} />
+              <Route path="/espaceclient/devis" element={<ClientPortalQuotes />} />
+              <Route path="/espaceclient/factures" element={<ClientPortalInvoices />} />
+              <Route path="/espaceclient/profil" element={<ClientPortalProfile />} />
+              <Route path="/espaceclient/projets" element={<ClientPortalProjects />} />
+              <Route path="/espaceclient/projets/:id" element={<ClientPortalProjectDetail />} />
+              <Route path="/espaceclient/planning" element={<ClientPortalPlanning />} />
+              <Route path="/espaceclient/debug" element={<ClientPortalDebug />} />
               <Route path="/share/dossier/:token" element={<DossierShare />} />
               <Route
                 path="/first-login"
@@ -176,6 +200,7 @@ function App() {
                         <Route path="/vehicles/:id" element={<VehicleDetail />} />
                         <Route path="/rentals" element={<Rentals />} />
                         <Route path="/rentals/:id" element={<RentalDetail />} />
+                        <Route path="/portal-requests" element={<PortalRequests />} />
                         <Route path="/services" element={<Services />} />
                         <Route path="/services/:id" element={<ServiceDetail />} />
                         <Route path="/clients" element={<Clients />} />
@@ -194,6 +219,7 @@ function App() {
                         <Route path="/billing/*" element={<Navigate to="/accounting/documents" replace />} />
                         <Route path="/maintenance" element={<Maintenance />} />
                         <Route path="/maintenance/:id" element={<MaintenanceDetail />} />
+                        <Route path="/incidents/:id" element={<IncidentDetail />} />
                         <Route path="/settings" element={<SettingsPage />} />
                         <Route path="/company" element={<CompanySettingsPage />} />
                         <Route path="/company/template-studio" element={<TemplateStudio />} />

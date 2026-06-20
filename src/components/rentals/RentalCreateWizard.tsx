@@ -185,7 +185,7 @@ const DepotDistanceCard: React.FC<{ companyAddress: string; deliveryAddress: str
 
 interface Props {
   onSubmit: (data: RentalCreatePayload) => Promise<void> | void;
-  clients: Array<{ id: string; name: string; company?: string | null }>;
+  clients: Array<{ id: string; name: string; client_type?: string; company_client_id?: string | null; default_delivery_address?: string | null }>;
 }
 
 type StepId = 'basic' | 'delivery' | 'items' | 'personnel' | 'pricing' | 'summary';
@@ -232,6 +232,8 @@ const RentalCreateWizard: React.FC<Props> = ({ onSubmit, clients }) => {
   const [title, setTitle] = useState('');
   const [location, setLocation] = useState('');
   const [confirmedLocation, setConfirmedLocation] = useState('');
+  const [deliveryAddress, setDeliveryAddress] = useState('');
+  const [deliveryAddressAutoFilled, setDeliveryAddressAutoFilled] = useState(false);
   const [description, setDescription] = useState('');
   const [color, setColor] = useState<string>('#111827');
   const [startDate, setStartDate] = useState('');
@@ -278,8 +280,20 @@ const RentalCreateWizard: React.FC<Props> = ({ onSubmit, clients }) => {
   const locale = language === 'fr' ? 'fr-FR' : 'en-US';
   const dateLocale = language === 'fr' ? fr : enUS;
   const selectedClient = useMemo(() => clients.find((client) => client.id === clientId) || null, [clients, clientId]);
-  const selectedClientCompany = selectedClient?.company?.trim() || '';
-  const hasClientCompany = Boolean(selectedClientCompany);
+  const hasClientCompany = Boolean(selectedClient?.company_client_id);
+
+  // Auto-fill delivery address from client default when client changes
+  useEffect(() => {
+    const addr = selectedClient?.default_delivery_address?.trim() || '';
+    if (addr && (deliveryAddress === '' || deliveryAddressAutoFilled)) {
+      setDeliveryAddress(addr);
+      setDeliveryAddressAutoFilled(true);
+    } else if (!addr && deliveryAddressAutoFilled) {
+      setDeliveryAddress('');
+      setDeliveryAddressAutoFilled(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientId]);
 
   const dateTimeFormatter = useMemo(
     () =>
@@ -315,12 +329,8 @@ const RentalCreateWizard: React.FC<Props> = ({ onSubmit, clients }) => {
     if (!hasClientCompany) {
       setClientRepresentsCompany(false);
       setClientRepresentsTouched(false);
-      return;
     }
-    if (!clientRepresentsTouched) {
-      setClientRepresentsCompany(true);
-    }
-  }, [hasClientCompany, clientRepresentsTouched]);
+  }, [hasClientCompany]);
 
   useEffect(() => {
     if (type === 'sale') {
@@ -872,6 +882,7 @@ const RentalCreateWizard: React.FC<Props> = ({ onSubmit, clients }) => {
         usage_start_date: usageStartDate || null,
         usage_end_date: usageEndDate || null,
         location,
+        delivery_address: deliveryAddress.trim() || null,
         delivery_offer_id: selectedDeliveryOffer?.id || null,
         delivery_offer_name: selectedDeliveryOffer?.name || null,
         delivery_pricing_type: selectedDeliveryOffer?.pricing_type || null,
@@ -966,7 +977,7 @@ const RentalCreateWizard: React.FC<Props> = ({ onSubmit, clients }) => {
                           placeholder={t('rentals.wizard.basic.clientPlaceholder')}
                           searchPlaceholder={t('rentals.wizard.basic.clientSearchPlaceholder')}
                           emptyLabel={t('rentals.wizard.basic.clientEmpty')}
-                          options={clients.map((c) => ({ value: c.id, label: c.name }))}
+                          options={clients.filter((c) => !c.client_type || c.client_type === 'person').map((c) => ({ value: c.id, label: c.name }))}
                         />
                       </Field>
                     </div>
@@ -1144,7 +1155,7 @@ const RentalCreateWizard: React.FC<Props> = ({ onSubmit, clients }) => {
           {stepsDef[step] === 'delivery' && (
               <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
                 <div className="lg:col-span-3 space-y-6">
-                  <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-4">
                     <Field
                       label={t('rentals.wizard.delivery.locationLabel')}
                       id="rental-location"
@@ -1159,6 +1170,28 @@ const RentalCreateWizard: React.FC<Props> = ({ onSubmit, clients }) => {
                         emptyLabel={t('rentals.wizard.delivery.addressEmpty')}
                         loadingLabel={t('common.loading')}
                       />
+                    </Field>
+                    <Field
+                      label="Adresse de livraison"
+                      id="rental-delivery-address"
+                      helper="Adresse précise pour la livraison du matériel. Pré-remplie depuis le client si renseignée."
+                    >
+                      <div className="relative">
+                        <AddressSearchInput
+                          id="rental-delivery-address"
+                          value={deliveryAddress}
+                          onChange={(v) => { setDeliveryAddress(v); setDeliveryAddressAutoFilled(false); }}
+                          onSelect={(v) => { setDeliveryAddress(v); setDeliveryAddressAutoFilled(false); }}
+                          placeholder="Ex : 12 rue de la Paix, 75001 Paris"
+                          emptyLabel={t('rentals.wizard.delivery.addressEmpty')}
+                          loadingLabel={t('common.loading')}
+                        />
+                        {deliveryAddressAutoFilled && deliveryAddress && (
+                          <span className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-600 pointer-events-none">
+                            depuis le client
+                          </span>
+                        )}
+                      </div>
                     </Field>
                   </div>
                   <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-4">

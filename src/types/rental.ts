@@ -146,6 +146,11 @@ export interface Rental {
   returned_at?: string | null;
   return_info?: RentalReturn | null;
   rental_coefficient_override?: number | null;
+  portal_request_id?: string | null;
+  portal_validated?: boolean | null;
+  portal_validated_at?: string | null;
+  portal_validated_by_id?: string | null;
+  portal_validation_notes?: string | null;
 }
 
 export interface RentalPersonnelServiceItem {

@@ -553,6 +553,152 @@ const Accounting: React.FC = () => {
     if (isDocumentsRoute) navigate('/accounting');
   };
 
+  // ─── FEC helpers ─────────────────────────────────────────────────────────────
+
+  const fecDate = (value: string | null | undefined): string => {
+    const d = parseDate(value);
+    return d ? format(d, 'yyyyMMdd') : '';
+  };
+
+  const fecAmt = (n: number): string => Math.abs(n).toFixed(2);
+
+  const clientCode = (name: string | null | undefined): string =>
+    (name || 'INCONNU').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10).padEnd(1, 'X');
+
+  const pipeLine = (cols: (string | number)[]): string =>
+    cols.map((c) => String(c ?? '').replace(/\|/g, ' ')).join('|');
+
+  // ─── FEC — Fichier des Écritures Comptables (norme DGFiP) ───────────────────
+
+  const handleExportFEC = () => {
+    const header = 'JournalCode|JournalLib|EcritureNum|EcritureDate|CompteNum|CompteLib|CompAuxNum|CompAuxLib|PieceRef|PieceDate|EcritureLib|Debit|Credit|EcritureLet|DateLet|ValidDate|Montantdevise|Idevise';
+
+    const lines: string[] = [header];
+
+    // Journal des ventes (VTE) — une écriture par facture
+    invoicesInRange
+      .filter((inv) => inv.status !== 'draft' && inv.status !== 'cancelled')
+      .forEach((inv) => {
+        const dt = fecDate(inv.created_at);
+        const num = inv.invoice_number;
+        const cli = inv.client?.name || 'Client inconnu';
+        const cliCode = clientCode(cli);
+        const ht = fecAmt(inv.amount_ht);
+        const ttc = fecAmt(inv.amount_ttc);
+        const vat = fecAmt(inv.vat_amount);
+
+        // Débit client 411
+        lines.push(pipeLine(['VTE', 'Journal des ventes', num, dt, '411000', 'Clients', `411${cliCode}`, cli, num, dt, cli, ttc, '0.00', '', '', dt, '', '']));
+        // Crédit produit 706
+        lines.push(pipeLine(['VTE', 'Journal des ventes', num, dt, '706000', 'Prestations de services', '', '', num, dt, num, '0.00', ht, '', '', dt, '', '']));
+        // Crédit TVA 445712 (si applicable)
+        if (!autoEntrepreneurMode && inv.vat_amount > 0) {
+          lines.push(pipeLine(['VTE', 'Journal des ventes', num, dt, '445712', 'TVA collectée 20%', '', '', num, dt, `TVA ${num}`, '0.00', vat, '', '', dt, '', '']));
+        }
+      });
+
+    // Journal de banque (BNQ) — une écriture par paiement
+    paymentsInRange
+      .filter((p) => p.status === 'completed')
+      .forEach((p) => {
+        const dt = fecDate(p.payment_date);
+        const ref = p.reference || p.id.slice(0, 14);
+        const cli = p.client?.name || 'Client inconnu';
+        const cliCode = clientCode(cli);
+        const pieceRef = p.invoice_number || ref;
+        const lib = `Règlement ${pieceRef}`;
+        const isRefund = p.payment_type === 'refund' || p.amount < 0;
+        const amt = fecAmt(p.amount);
+
+        if (isRefund) {
+          // Remboursement : débit client, crédit banque
+          lines.push(pipeLine(['BNQ', 'Journal de banque', ref, dt, `411${cliCode}`, cli, `411${cliCode}`, cli, pieceRef, dt, lib, amt, '0.00', '', '', dt, '', '']));
+          lines.push(pipeLine(['BNQ', 'Journal de banque', ref, dt, '512000', 'Banque', '', '', pieceRef, dt, lib, '0.00', amt, '', '', dt, '', '']));
+        } else {
+          // Encaissement : débit banque, crédit client
+          lines.push(pipeLine(['BNQ', 'Journal de banque', ref, dt, '512000', 'Banque', '', '', pieceRef, dt, lib, amt, '0.00', '', '', dt, '', '']));
+          lines.push(pipeLine(['BNQ', 'Journal de banque', ref, dt, '411000', 'Clients', `411${cliCode}`, cli, pieceRef, dt, lib, '0.00', amt, '', '', dt, '', '']));
+        }
+      });
+
+    const siren = companyIdentity.siren.replace(/\s/g, '');
+    const year = format(periodRange.start, 'yyyy');
+    const filename = `FEC${siren}${year}1231.txt`;
+    downloadTextFile(filename, lines.join('\r\n'), 'text/plain;charset=utf-8;');
+    toast.success(`FEC exporté — ${lines.length - 1} écritures`);
+  };
+
+  // ─── Journal des ventes Sage / Cegid ─────────────────────────────────────────
+
+  const handleExportJournalVentes = () => {
+    const rows: Array<Array<string | number>> = [
+      ['Code journal', 'Date', 'Numéro pièce', 'Compte', 'Compte auxiliaire', 'Libellé', 'Débit', 'Crédit', 'Référence', 'Statut'],
+      ...invoicesInRange
+        .filter((inv) => inv.status !== 'draft' && inv.status !== 'cancelled')
+        .flatMap((inv) => {
+          const date = formatDateLabel(inv.created_at);
+          const cli = inv.client?.name || 'Client inconnu';
+          const cliCode = clientCode(cli);
+          const lines: Array<Array<string | number>> = [
+            ['VTE', date, inv.invoice_number, '411000', `411${cliCode}`, cli, inv.amount_ttc.toFixed(2), '0.00', inv.invoice_number, statusLabel(inv.status)],
+            ['VTE', date, inv.invoice_number, '706000', '', `Prestation — ${inv.invoice_number}`, '0.00', inv.amount_ht.toFixed(2), inv.invoice_number, ''],
+          ];
+          if (!autoEntrepreneurMode && inv.vat_amount > 0) {
+            lines.push(['VTE', date, inv.invoice_number, '445712', '', `TVA — ${inv.invoice_number}`, '0.00', inv.vat_amount.toFixed(2), inv.invoice_number, '']);
+          }
+          return lines;
+        }),
+    ];
+    const csv = rows.map((row) => row.map(csvCell).join(';')).join('\n');
+    downloadTextFile(`journal-ventes-sage-${format(new Date(), 'yyyy-MM-dd')}.csv`, csv, 'text/csv;charset=utf-8;');
+    toast.success('Journal des ventes exporté (format Sage).');
+  };
+
+  // ─── Export TVA CA3 ───────────────────────────────────────────────────────────
+
+  const handleExportTVA = () => {
+    const booked = invoicesInRange.filter((inv) => inv.status !== 'draft' && inv.status !== 'cancelled');
+    const base20 = booked.reduce((s, inv) => s + inv.amount_ht, 0);
+    const tva20 = booked.reduce((s, inv) => s + inv.vat_amount, 0);
+    const ttcTotal = booked.reduce((s, inv) => s + inv.amount_ttc, 0);
+    const tvaDeductible = maintenanceCosts
+      .filter((m) => isWithinRange(parseDate(m.completed_date), periodRange))
+      .reduce((s, m) => s + m.cost * 0.2, 0);
+    const tvaNette = Math.max(0, tva20 - tvaDeductible);
+
+    const rows: Array<Array<string | number>> = [
+      ['Déclaration TVA — ' + periodRange.label],
+      [],
+      ['Rubrique', 'Base HT (€)', 'TVA (€)'],
+      ['CA taxable 20% (case A)', base20.toFixed(2), tva20.toFixed(2)],
+      ['Total TTC facturé', ttcTotal.toFixed(2), ''],
+      [],
+      ['TVA collectée (case 0979)', '', tva20.toFixed(2)],
+      ['TVA déductible sur charges (estimation)', '', tvaDeductible.toFixed(2)],
+      ['TVA nette à décaisser', '', tvaNette.toFixed(2)],
+      [],
+      [`Période : ${periodRange.label}`],
+      [`Société : ${companyIdentity.name}`],
+      [`SIREN : ${companyIdentity.siren}`],
+      [`N° TVA : ${companyIdentity.vat}`],
+      [],
+      ['--- Détail par facture ---'],
+      ['Facture', 'Client', 'Date', 'Base HT', 'TVA', 'TTC', 'Statut'],
+      ...booked.map((inv) => [
+        inv.invoice_number,
+        inv.client?.name || '—',
+        formatDateLabel(inv.created_at),
+        inv.amount_ht.toFixed(2),
+        inv.vat_amount.toFixed(2),
+        inv.amount_ttc.toFixed(2),
+        statusLabel(inv.status),
+      ]),
+    ];
+    const csv = rows.map((row) => row.map(csvCell).join(';')).join('\n');
+    downloadTextFile(`tva-ca3-${format(periodRange.start, 'yyyy-MM')}.csv`, csv, 'text/csv;charset=utf-8;');
+    toast.success('Export TVA CA3 généré.');
+  };
+
   const handleExportSummary = () => {
     const rows: Array<Array<string | number>> = [
       ['Entreprise', companyIdentity.name],
@@ -864,33 +1010,110 @@ const Accounting: React.FC = () => {
     </div>
   );
 
-  const renderExportsTab = () => (
-    <div className="space-y-4">
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-        <Button variant="secondary" onClick={handleExportSummary} className="justify-start">
-          <Download className="h-4 w-4" />
-          Export synthèse comptable
-        </Button>
-        <Button variant="secondary" onClick={handleExportReceivables} className="justify-start">
-          <Download className="h-4 w-4" />
-          Export balance clients
-        </Button>
-        <Button variant="secondary" onClick={handleExportPayments} className="justify-start">
-          <Download className="h-4 w-4" />
-          Export journal paiements
-        </Button>
-      </div>
+  const renderExportsTab = () => {
+    const invoiceCount = invoicesInRange.filter((i) => i.status !== 'draft' && i.status !== 'cancelled').length;
+    const paymentCount = paymentsInRange.filter((p) => p.status === 'completed').length;
 
-      <div className="rounded-lg border border-gray-200 bg-white p-4">
-        <h3 className="text-base font-semibold text-gray-900">Utilité des exports</h3>
-        <ul className="mt-3 space-y-2 text-sm text-gray-700">
-          <li>1. `Synthèse comptable`: vue globale de pilotage (CA, encours{autoEntrepreneurMode ? '' : ', TVA'}).</li>
-          <li>2. `Balance clients`: suivi des factures non soldées et relances.</li>
-          <li>3. `Journal paiements`: historique des encaissements/remboursements.</li>
-        </ul>
+    const exports: Array<{
+      title: string;
+      description: string;
+      format: string;
+      formatColor: string;
+      note?: string;
+      onClick: () => void;
+      disabled?: boolean;
+    }> = [
+      {
+        title: 'FEC — Fichier des Écritures Comptables',
+        description: `Format officiel DGFiP. Obligatoire en cas de contrôle fiscal. Contient les journaux VTE (ventes) et BNQ (banque) pour la période sélectionnée. ${invoiceCount} facture(s) + ${paymentCount} paiement(s).`,
+        format: 'TXT · Norme DGFiP',
+        formatColor: 'bg-blue-100 text-blue-700',
+        note: 'À transmettre à votre expert-comptable ou en réponse à une demande de l\'administration fiscale.',
+        onClick: handleExportFEC,
+        disabled: autoEntrepreneurMode,
+      },
+      {
+        title: 'Journal des ventes — Format Sage / Cegid',
+        description: `Écritures de ventes avec comptes PCG (411, 706, 445712). Compatible Sage Ligne 100, Cegid, EBP. ${invoiceCount} facture(s) sur la période.`,
+        format: 'CSV · Sage / Cegid',
+        formatColor: 'bg-violet-100 text-violet-700',
+        onClick: handleExportJournalVentes,
+      },
+      {
+        title: 'TVA — Aide à la CA3',
+        description: `Récapitulatif par taux avec base imposable, TVA collectée, TVA déductible estimée et TVA nette. Détail facture par facture inclus.`,
+        format: 'CSV · Déclaration CA3',
+        formatColor: 'bg-amber-100 text-amber-700',
+        note: autoEntrepreneurMode ? 'Non applicable en régime auto-entrepreneur.' : undefined,
+        onClick: handleExportTVA,
+        disabled: autoEntrepreneurMode,
+      },
+      {
+        title: 'Synthèse de pilotage',
+        description: 'Vue globale : CA facturé, encaissements, remboursements, charges maintenance, trésorerie nette, encours client.',
+        format: 'CSV · Excel',
+        formatColor: 'bg-green-100 text-green-700',
+        onClick: handleExportSummary,
+      },
+      {
+        title: 'Balance clients (relances)',
+        description: 'Toutes les factures avec solde restant dû, date d\'échéance et statut. Pour le suivi des relances.',
+        format: 'CSV · Excel',
+        formatColor: 'bg-green-100 text-green-700',
+        onClick: handleExportReceivables,
+      },
+      {
+        title: 'Journal des encaissements',
+        description: 'Historique de tous les paiements reçus avec méthode, référence et client. Pour le rapprochement bancaire.',
+        format: 'CSV · Excel',
+        formatColor: 'bg-green-100 text-green-700',
+        onClick: handleExportPayments,
+      },
+    ];
+
+    return (
+      <div className="space-y-3">
+        <div className="rounded-lg border border-gray-100 bg-gray-50 px-4 py-3 text-sm text-gray-600">
+          Période active : <span className="font-semibold text-gray-900">{periodRange.label}</span>
+          <span className="ml-4 text-gray-400">·</span>
+          <span className="ml-4">{invoiceCount} facture(s) · {paymentCount} paiement(s)</span>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          {exports.map((exp) => (
+            <div
+              key={exp.title}
+              className={`rounded-xl border bg-white p-5 flex flex-col gap-3 ${exp.disabled ? 'opacity-50' : ''}`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-semibold text-gray-900">{exp.title}</span>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide ${exp.formatColor}`}>
+                      {exp.format}
+                    </span>
+                  </div>
+                  <p className="mt-1.5 text-xs text-gray-500 leading-relaxed">{exp.description}</p>
+                  {exp.note && (
+                    <p className="mt-1 text-[11px] text-amber-700 bg-amber-50 rounded px-2 py-1">{exp.note}</p>
+                  )}
+                </div>
+              </div>
+              <Button
+                variant="secondary"
+                onClick={exp.onClick}
+                disabled={exp.disabled}
+                className="self-start text-xs py-1.5 px-3"
+              >
+                <Download className="h-3.5 w-3.5" />
+                Télécharger
+              </Button>
+            </div>
+          ))}
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderActiveTab = () => {
     if (activeLocalTab === 'overview') return renderOverviewTab();

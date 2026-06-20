@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { CheckCircle, ChevronDown, Filter, Loader2, Search, Trash2, X } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { AlertTriangle, CheckCircle, ChevronDown, Filter, Loader2, Plus, Search, Trash2, X } from 'lucide-react';
+import IncidentModal from '../components/maintenance/IncidentModal';
 import toast from 'react-hot-toast';
 import { MaintenanceTask, useMaintenance } from '../hooks/useMaintenance';
 import EmptyTableRow from '../components/common/EmptyTableRow';
@@ -19,7 +20,167 @@ import Button from '../components/ui/Button';
 import { StatusBadge } from '../components/ui-kit';
 import { cn } from '../utils/cn';
 
+// ─── Incident types ───────────────────────────────────────────────────────────
+
+const INCIDENT_TYPE_LABELS: Record<string, string> = {
+  damage: 'Dégât', theft: 'Vol', accident: 'Accident', loss: 'Perte', vandalism: 'Vandalisme', other: 'Autre',
+};
+const INCIDENT_SEVERITY_CFG: Record<string, { label: string; cls: string }> = {
+  minor:      { label: 'Mineur',       cls: 'bg-green-100 text-green-700' },
+  moderate:   { label: 'Modéré',       cls: 'bg-amber-100 text-amber-700' },
+  severe:     { label: 'Grave',        cls: 'bg-orange-100 text-orange-700' },
+  total_loss: { label: 'Perte totale', cls: 'bg-red-100 text-red-700' },
+};
+const INCIDENT_STATUS_CFG: Record<string, { label: string; cls: string }> = {
+  reported:  { label: 'Déclaré',     cls: 'bg-amber-100 text-amber-700' },
+  assessed:  { label: 'Expertisé',   cls: 'bg-blue-100 text-blue-700' },
+  claimed:   { label: 'Assurance',   cls: 'bg-violet-100 text-violet-700' },
+  in_repair: { label: 'En répar.',   cls: 'bg-orange-100 text-orange-700' },
+  resolved:  { label: 'Résolu',      cls: 'bg-teal-100 text-teal-700' },
+  closed:    { label: 'Clôturé',     cls: 'bg-gray-100 text-gray-600' },
+};
+
+interface IncidentRow {
+  id: string; equipment_name: string | null; serial_number: string | null;
+  client_name: string | null; incident_type: string; severity: string;
+  status: string; title: string; incident_date: string | null;
+  repair_estimate: number | null; client_charge_amount: number | null; created_at: string;
+}
+
+// ─── IncidentList sub-component ───────────────────────────────────────────────
+
+const IncidentList: React.FC<{ onNew: () => void }> = ({ onNew }) => {
+  const navigate = useNavigate();
+  const [incidents, setIncidents] = useState<IncidentRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [query, setQuery] = useState('');
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/incidents');
+      if (res.ok) setIncidents(await res.json());
+    } finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const filtered = useMemo(() => {
+    const q = query.toLowerCase();
+    return incidents.filter(i =>
+      !q || [i.title, i.equipment_name, i.client_name, i.serial_number]
+        .some(v => v?.toLowerCase().includes(q))
+    );
+  }, [incidents, query]);
+
+  const open = filtered.filter(i => !['resolved', 'closed'].includes(i.status));
+  const closed = filtered.filter(i => ['resolved', 'closed'].includes(i.status));
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3">
+        <div className="relative flex-1 max-w-xs">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <input value={query} onChange={e => setQuery(e.target.value)}
+            placeholder="Rechercher un sinistre…"
+            className="pl-9 pr-4 py-2 w-full rounded-md border border-gray-300 text-sm focus:border-red-400 focus:ring-red-400" />
+        </div>
+        <button onClick={onNew}
+          className="ml-auto inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700">
+          <Plus size={15} /> Déclarer un sinistre
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center h-32">
+          <Loader2 className="animate-spin text-gray-400" size={24} />
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="text-center py-16">
+          <div className="w-14 h-14 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-3">
+            <AlertTriangle size={24} className="text-red-300" />
+          </div>
+          <p className="text-sm text-gray-500">Aucun sinistre enregistré</p>
+          <button onClick={onNew} className="mt-3 text-sm text-red-600 hover:underline font-medium">
+            Déclarer le premier sinistre →
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {open.length > 0 && (
+            <div>
+              <div className="text-xs font-semibold uppercase text-gray-400 tracking-wide mb-2">
+                En cours ({open.length})
+              </div>
+              <div className="bg-white rounded-xl border border-gray-100 shadow-sm divide-y divide-gray-50">
+                {open.map(i => <IncidentRow key={i.id} incident={i} onClick={() => navigate(`/incidents/${i.id}`)} />)}
+              </div>
+            </div>
+          )}
+          {closed.length > 0 && (
+            <div>
+              <div className="text-xs font-semibold uppercase text-gray-400 tracking-wide mb-2">
+                Clôturés ({closed.length})
+              </div>
+              <div className="bg-white rounded-xl border border-gray-100 shadow-sm divide-y divide-gray-50 opacity-75">
+                {closed.map(i => <IncidentRow key={i.id} incident={i} onClick={() => navigate(`/incidents/${i.id}`)} />)}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const IncidentRow: React.FC<{ incident: IncidentRow; onClick: () => void }> = ({ incident: i, onClick }) => {
+  const sev = INCIDENT_SEVERITY_CFG[i.severity];
+  const sta = INCIDENT_STATUS_CFG[i.status];
+  return (
+    <button onClick={onClick} className="w-full flex items-center gap-4 px-5 py-3.5 hover:bg-gray-50/50 text-left transition-colors">
+      <div className="w-9 h-9 rounded-lg bg-red-50 flex items-center justify-center shrink-0">
+        <AlertTriangle size={16} className="text-red-400" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-sm font-medium text-gray-900 truncate">{i.title}</span>
+          {sev && <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${sev.cls}`}>{sev.label}</span>}
+          {sta && <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${sta.cls}`}>{sta.label}</span>}
+        </div>
+        <div className="text-xs text-gray-500 mt-0.5 flex flex-wrap gap-x-3">
+          {i.equipment_name && <span>{i.equipment_name}</span>}
+          {i.serial_number && <span className="font-mono">{i.serial_number}</span>}
+          {i.client_name && <span>· {i.client_name}</span>}
+          <span className="text-gray-400">
+            {INCIDENT_TYPE_LABELS[i.incident_type] ?? i.incident_type}
+            {i.incident_date ? ` · ${new Date(i.incident_date).toLocaleDateString('fr-FR')}` : ''}
+          </span>
+        </div>
+      </div>
+      <div className="text-right shrink-0">
+        {i.client_charge_amount != null && i.client_charge_amount > 0 && (
+          <div className="text-sm font-bold text-red-700">
+            {i.client_charge_amount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}
+          </div>
+        )}
+        {i.repair_estimate != null && (
+          <div className="text-[10px] text-gray-400">
+            Est. {i.repair_estimate.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}
+          </div>
+        )}
+      </div>
+    </button>
+  );
+};
+
+// ─── Main page ────────────────────────────────────────────────────────────────
+
 const MaintenancePage: React.FC = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = searchParams.get('tab') === 'incidents' ? 'incidents' : 'maintenance';
+  const [showIncidentModal, setShowIncidentModal] = useState(false);
+  const incidentListKey = React.useRef(0);
+
   const { tasks, loading, updateTasksStatus, deleteTask } = useMaintenance();
   const [query, setQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
@@ -135,10 +296,52 @@ const MaintenancePage: React.FC = () => {
   };
 
   return (
+    <>
+    {showIncidentModal && (
+      <IncidentModal
+        onClose={() => setShowIncidentModal(false)}
+        onCreated={() => {
+          setShowIncidentModal(false);
+          incidentListKey.current += 1;
+          setSearchParams({ tab: 'incidents' });
+        }}
+      />
+    )}
     <div className="space-y-6">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-4">
+          <h1 className="text-2xl font-semibold text-gray-900">Maintenance & Sinistres</h1>
+          <div className="flex rounded-lg border border-gray-200 bg-gray-50 p-1 text-sm gap-1">
+            <button
+              onClick={() => setSearchParams({})}
+              className={`px-4 py-1.5 rounded-md font-medium transition-colors ${
+                activeTab === 'maintenance'
+                  ? 'bg-white shadow-sm text-blue-700'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Maintenance
+              {tasks.length > 0 && (
+                <span className="ml-2 px-1.5 py-0.5 text-xs rounded-full bg-blue-100 text-blue-700">
+                  {tasks.filter(t => t.status !== 'completed' && t.status !== 'cancelled').length}
+                </span>
+              )}
+            </button>
+            <button
+              onClick={() => setSearchParams({ tab: 'incidents' })}
+              className={`px-4 py-1.5 rounded-md font-medium transition-colors ${
+                activeTab === 'incidents'
+                  ? 'bg-white shadow-sm text-red-700'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <AlertTriangle className="inline-block mr-1.5 h-3.5 w-3.5" />
+              Sinistres
+            </button>
+          </div>
+        </div>
+        {activeTab === 'incidents' ? null : (
         <div className="flex items-center gap-3 flex-1">
-          <h1 className="text-2xl font-semibold text-gray-900">Maintenance</h1>
           <div className="relative w-full max-w-xs">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
             <input
@@ -287,8 +490,12 @@ const MaintenancePage: React.FC = () => {
             )}
           </div>
         </div>
+        )}
       </header>
 
+      {activeTab === 'incidents' ? (
+        <IncidentList key={incidentListKey.current} onNew={() => setShowIncidentModal(true)} />
+      ) : (
       <section className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
           <h2 className="text-sm font-medium text-gray-700">
@@ -468,7 +675,9 @@ const MaintenancePage: React.FC = () => {
           </Table>
         </div>
       </section>
+      )}
     </div>
+    </>
   );
 };
 

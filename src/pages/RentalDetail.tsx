@@ -11,7 +11,7 @@ L.Icon.Default.mergeOptions({
   shadowUrl: new URL('leaflet/dist/images/marker-shadow.png', import.meta.url).href,
 });
 import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom';
-import { FileText, Package, Info, Euro, Users, Calendar, Trash2, FilePlus2, ShieldCheck, ShieldX, Wrench, Truck, Undo2, CreditCard, ArrowLeft, Edit, Save, Check, History, Flag, UserCheck, FileSignature, Folder, ChevronRight, ChevronLeft, ChevronDown, FolderPlus, Upload, Home, Briefcase, Camera, Image, Music, Video, Star, Share2, Copy, ExternalLink, QrCode, MessageSquarePlus, AlertTriangle, Navigation, Clock, MapPin } from 'lucide-react';
+import { FileText, Package, Info, Euro, Users, Calendar, Trash2, FilePlus2, ShieldCheck, ShieldX, Wrench, Truck, Undo2, CreditCard, ArrowLeft, Edit, Save, Check, History, Flag, UserCheck, FileSignature, Folder, ChevronRight, ChevronLeft, ChevronDown, FolderPlus, Upload, Home, Briefcase, Camera, Image, Music, Video, Star, Share2, Copy, ExternalLink, QrCode, MessageSquarePlus, AlertTriangle, Navigation, Clock, MapPin, Globe, BadgeCheck, HardHat } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import DocumentGeneratorModal from '../components/rentals/DocumentGeneratorModal';
 import { Equipment } from '../types/equipment';
@@ -23,6 +23,7 @@ import EquipmentCatalogPanel from '../components/rentals/EquipmentCatalogPanel';
 import RentalHeader from '../components/rentals/RentalHeader';
 import RentalMilestonesPanel from '../components/rentals/RentalMilestonesPanel';
 import RentalTasksPanel from '../components/rentals/RentalTasksPanel';
+import RentalCrewPanel from '../components/rentals/RentalCrewPanel';
 import RentalFileExplorerModal from '../components/rentals/RentalFileExplorerModal';
 import { useRental } from '../hooks/useRental';
 import { useVehicles } from '../hooks/useVehicles';
@@ -44,7 +45,7 @@ import ConfirmDialog from '../components/common/ConfirmDialog';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
 import Textarea from '../components/ui/Textarea';
-import { Button, ColorPickerButton, ProgressStepsCard, StatusBadge, StepTransition, type BadgeTone } from '../components/ui-kit';
+import { AddressSearchInput, Button, ColorPickerButton, ProgressStepsCard, StatusBadge, StepTransition, type BadgeTone } from '../components/ui-kit';
 import type { ProgressStepTone } from '../components/ui-kit/ProgressStepsCard';
 import { DocumentTableDesign, DEFAULT_DOCUMENT_DESIGN as DEFAULT_DOC_DESIGN, extractDocumentDesign } from '../utils/documentDesign';
 import { LegalCompanyInfo } from '../utils/documentLegalFooter';
@@ -645,6 +646,92 @@ const withFilenameFragment = (url: string, filename: string) => {
   if (!filename) return url;
   const base = url.split('#')[0];
   return `${base}#filename=${encodeURIComponent(filename)}`;
+};
+
+type PortalValidationTabProps = {
+  rental: import('../types/rental').Rental;
+  onValidated: () => void;
+  userId?: string | null;
+};
+
+const PortalValidationTab: React.FC<PortalValidationTabProps> = ({ rental, onValidated, userId }) => {
+  const [notes, setNotes] = React.useState(rental.portal_validation_notes || '');
+  const [saving, setSaving] = React.useState(false);
+
+  const handleValidate = async () => {
+    setSaving(true);
+    try {
+      await fetch(`/api/portal-requests/rental/${rental.id}/validate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ validated_by_id: userId || null, notes: notes.trim() || null }),
+      });
+      onValidated();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const req = rental as import('../types/rental').Rental & {
+    portal_validated?: boolean;
+    portal_validated_at?: string | null;
+    portal_validation_notes?: string | null;
+  };
+
+  return (
+    <div className="p-6 space-y-6">
+      {/* Header banner */}
+      <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-4 flex items-center gap-3">
+        <Globe className="h-5 w-5 text-emerald-600 flex-shrink-0" />
+        <div>
+          <p className="text-sm font-semibold text-emerald-800">Projet issu d'une demande client</p>
+          <p className="text-xs text-emerald-600 mt-0.5">
+            Ce projet a été créé automatiquement depuis l'espace client. Une validation administrative est requise avant que le client ne puisse voir le tarif final.
+          </p>
+        </div>
+      </div>
+
+      {req.portal_validated ? (
+        <div className="rounded-xl border border-emerald-200 bg-white p-5 flex items-center gap-3 shadow-sm">
+          <BadgeCheck className="h-8 w-8 text-emerald-500 flex-shrink-0" />
+          <div>
+            <p className="font-semibold text-slate-800">Projet validé</p>
+            <p className="text-sm text-slate-500 mt-0.5">
+              Validé le {req.portal_validated_at ? new Date(req.portal_validated_at).toLocaleString('fr-FR') : '—'}
+            </p>
+            {req.portal_validation_notes && (
+              <p className="text-sm text-slate-600 mt-1 italic">"{req.portal_validation_notes}"</p>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
+          <h3 className="font-semibold text-slate-800">Valider le tarif et les conditions</h3>
+          <p className="text-sm text-slate-500">
+            Vérifiez le prix total, la réduction éventuelle et les dates dans les onglets correspondants avant de valider.
+          </p>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Notes de validation (optionnel)</label>
+            <textarea
+              rows={3}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Ex : Prix ajusté -10%, devis verbal accepté..."
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 placeholder-slate-400 focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100 resize-none"
+            />
+          </div>
+          <button
+            onClick={handleValidate}
+            disabled={saving}
+            className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50 transition"
+          >
+            <BadgeCheck className="h-4 w-4" />
+            {saving ? 'Validation…' : 'Valider le projet'}
+          </button>
+        </div>
+      )}
+    </div>
+  );
 };
 
 const RentalDetail = () => {
@@ -1583,6 +1670,12 @@ const RentalDetail = () => {
   const [deliveryQuantityInput, setDeliveryQuantityInput] = React.useState('');
   const [deliveryTripType, setDeliveryTripType] = React.useState<'one_way' | 'round_trip'>('one_way');
   const [savingDeliveryOffer, setSavingDeliveryOffer] = React.useState(false);
+  const [deliveryAddressEdit, setDeliveryAddressEdit] = React.useState(rental?.delivery_address || '');
+  const [savingDeliveryAddress, setSavingDeliveryAddress] = React.useState(false);
+
+  React.useEffect(() => {
+    setDeliveryAddressEdit(rental?.delivery_address || '');
+  }, [rental?.delivery_address]);
 
   // Personnel tab state (services only)
   const [personnelAssignmentIds, setPersonnelAssignmentIds] = React.useState<string[]>([]);
@@ -1964,6 +2057,7 @@ const RentalDetail = () => {
       { id: 'general', name: 'Informations générales', icon: Info },
       { id: 'equipment', name: 'Équipements', icon: Package },
       { id: 'delivery', name: 'Livraison', icon: Calendar },
+      { id: 'crew', name: 'Équipe', icon: HardHat },
     ];
     if (rental?.type === 'service') {
       base.push({ id: 'personnel', name: 'Personnel', icon: UserCheck });
@@ -1984,8 +2078,11 @@ const RentalDetail = () => {
     if (rental?.return_info && rental.return_info.status === 'completed') {
       base.push({ id: 'returns', name: 'Retours', icon: Undo2 });
     }
+    if (rental?.portal_request_id && settings?.features?.client_portal) {
+      base.push({ id: 'portal_validation', name: 'Validation portail', icon: Globe });
+    }
     return base;
-  }, [rental]);
+  }, [rental, settings]);
 
   const updateTabsScrollState = React.useCallback(() => {
     const container = tabsContainerRef.current;
@@ -2160,7 +2257,7 @@ const RentalDetail = () => {
     if (found) {
       return {
         name: found.name,
-        company: found.company,
+        company_client_name: found.company_client?.name ?? null,
         address: found.address,
         email: found.email,
         phone: found.phone,
@@ -4366,7 +4463,7 @@ const RentalDetail = () => {
         <div className="bg-white rounded-lg p-6 h-full flex flex-col gap-6">
           <RentalGeneralForm
             rental={rental}
-            clients={clients.map(c => ({ id: c.id, name: c.name }))}
+            clients={clients.map(c => ({ id: c.id, name: c.name, client_type: c.client_type, company_client_id: c.company_client_id }))}
             onSubmit={handleRentalGeneralSubmit}
             formRef={generalFormRef}
           />
@@ -5115,6 +5212,20 @@ const RentalDetail = () => {
     }
   };
 
+
+  const saveDeliveryAddress = async () => {
+    if (!id || !rental) return;
+    setSavingDeliveryAddress(true);
+    try {
+      await supabase.from('rentals').update({ delivery_address: deliveryAddressEdit.trim() || null }).eq('id', id);
+      setRental({ ...rental, delivery_address: deliveryAddressEdit.trim() || null });
+      toast.success('Adresse de livraison enregistrée');
+    } catch {
+      toast.error("Impossible d'enregistrer l'adresse");
+    } finally {
+      setSavingDeliveryAddress(false);
+    }
+  };
 
   const saveDelivery = async () => {
     if (!id || !rental) return;
@@ -6001,7 +6112,61 @@ const RentalDetail = () => {
             <div className="p-6">
               <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
               <div className="lg:col-span-3">
-              <div className="bg-white rounded-lg shadow-sm p-6 space-y-4">
+              <div className="bg-white rounded-lg shadow-sm p-6 space-y-6">
+                {/* Adresse de livraison */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <div>
+                      <div className="text-sm font-semibold text-gray-900">Adresse de livraison</div>
+                      <div className="text-xs text-gray-500">Adresse précise où le matériel doit être livré.</div>
+                    </div>
+                    {!isEditing && rental.delivery_address && (
+                      <span className="text-xs text-gray-400">{rental.delivery_address}</span>
+                    )}
+                  </div>
+                  {isEditing ? (
+                    <div className="space-y-2">
+                      <AddressSearchInput
+                        id="rental-delivery-address-edit"
+                        value={deliveryAddressEdit}
+                        onChange={setDeliveryAddressEdit}
+                        onSelect={setDeliveryAddressEdit}
+                        placeholder="Ex : 12 rue de la Paix, 75001 Paris"
+                        emptyLabel="Aucune suggestion"
+                        loadingLabel="Recherche…"
+                      />
+                      <div className="flex items-center gap-2">
+                        {(() => {
+                          const clientDefault = clients.find(c => c.id === rental.client_id)?.default_delivery_address;
+                          return clientDefault ? (
+                            <button
+                              type="button"
+                              onClick={() => setDeliveryAddressEdit(clientDefault)}
+                              className="inline-flex items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-100 transition"
+                            >
+                              Pré-remplir depuis le client
+                            </button>
+                          ) : null;
+                        })()}
+                        <button
+                          type="button"
+                          onClick={saveDeliveryAddress}
+                          disabled={savingDeliveryAddress}
+                          className="ml-auto inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50 transition"
+                        >
+                          {savingDeliveryAddress ? 'Enregistrement…' : 'Enregistrer'}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="rounded-md border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-800">
+                      {rental.delivery_address || <span className="text-gray-400 italic">Non renseignée</span>}
+                    </div>
+                  )}
+                </div>
+
+                <div className="border-t border-gray-100" />
+
                 {deliverySummaryLabel && (
                   <div className="rounded-md border border-gray-200 bg-gray-50 p-4">
                     <div className="text-sm font-medium text-gray-900">Forfait livraison</div>
@@ -6253,11 +6418,15 @@ const RentalDetail = () => {
               </div>
               </div>
               <div className="lg:col-span-2 flex flex-col gap-3">
-                <DeliveryMapView address={rental?.location ?? ''} />
-                <DeliveryDistanceCard companyAddress={settings?.address ?? ''} deliveryAddress={rental?.location ?? ''} />
+                <DeliveryMapView address={rental?.delivery_address || rental?.location || ''} />
+                <DeliveryDistanceCard companyAddress={settings?.address ?? ''} deliveryAddress={rental?.delivery_address || rental?.location || ''} />
               </div>
             </div>
           </div>
+          )}
+
+          {activeTab === 'crew' && rental && (
+            <RentalCrewPanel rental={rental} />
           )}
 
           {activeTab === 'personnel' && (
@@ -8485,6 +8654,10 @@ const RentalDetail = () => {
                 )}
               </div>
             </div>
+          )}
+
+          {activeTab === 'portal_validation' && rental.portal_request_id && (
+            <PortalValidationTab rental={rental} onValidated={() => window.location.reload()} userId={user?.id} />
           )}
           </div>
         )}

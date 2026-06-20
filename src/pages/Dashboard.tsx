@@ -13,6 +13,7 @@ import RecentActivityWidget from '../components/dashboard/widgets/RecentActivity
 import UpcomingRentalsWidget from '../components/dashboard/widgets/UpcomingRentalsWidget';
 import MaintenanceWidget from '../components/dashboard/widgets/MaintenanceWidget';
 import PersonnelGanttWidget from '../components/dashboard/widgets/PersonnelGanttWidget';
+import PlanningGanttWidget from '../components/dashboard/widgets/PlanningGanttWidget';
 import StockPlanningWidget from '../components/dashboard/widgets/StockPlanningWidget';
 import UserTasksWidget from '../components/dashboard/widgets/UserTasksWidget';
 import ClockDateWidget from '../components/dashboard/widgets/ClockDateWidget';
@@ -217,6 +218,13 @@ const buildAvailableWidgets = (
       component: PersonnelGanttWidget,
       props: { personnel: data.personnel, activities: data.personnelActivities },
       defaultLayout: { w: 12, h: 6, minW: 6, minH: 5 },
+    },
+    {
+      id: 'planning-gantt',
+      title: 'Planning projets',
+      component: PlanningGanttWidget,
+      props: { rentals: data.rentals },
+      defaultLayout: { w: 12, h: 7, minW: 8, minH: 5 },
     },
     {
       id: 'user-tasks',

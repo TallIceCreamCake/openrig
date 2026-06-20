@@ -19,7 +19,20 @@ const CLIENT_SELECT = `
   email,
   phone,
   address,
-  company,
+  billing_address,
+  default_delivery_address,
+  internal_notes,
+  tags,
+  client_number,
+  default_equipment_discount,
+  financial_conditions,
+  vat_number,
+  siret,
+  legal_form,
+  share_capital,
+  rcs_number,
+  trust_score,
+  trust_score_computed_at,
   image_url,
   created_at,
   client_type,
@@ -48,8 +61,44 @@ const sanitizeClientPayload = (payload: Partial<Client>): ClientInsert | ClientU
   if (Object.prototype.hasOwnProperty.call(payload, 'address')) {
     sanitized.address = payload.address ?? null;
   }
-  if (Object.prototype.hasOwnProperty.call(payload, 'company')) {
-    sanitized.company = payload.company ?? null;
+  if (Object.prototype.hasOwnProperty.call(payload, 'billing_address')) {
+    (sanitized as any).billing_address = payload.billing_address ?? null;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, 'default_delivery_address')) {
+    (sanitized as any).default_delivery_address = payload.default_delivery_address ?? null;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, 'internal_notes')) {
+    (sanitized as any).internal_notes = payload.internal_notes ?? null;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, 'tags')) {
+    (sanitized as any).tags = payload.tags ?? [];
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, 'default_equipment_discount')) {
+    (sanitized as any).default_equipment_discount = payload.default_equipment_discount ?? 0;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, 'financial_conditions')) {
+    (sanitized as any).financial_conditions = payload.financial_conditions ?? [];
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, 'vat_number')) {
+    (sanitized as any).vat_number = payload.vat_number ?? null;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, 'siret')) {
+    (sanitized as any).siret = payload.siret ?? null;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, 'legal_form')) {
+    (sanitized as any).legal_form = payload.legal_form ?? null;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, 'share_capital')) {
+    (sanitized as any).share_capital = payload.share_capital ?? null;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, 'rcs_number')) {
+    (sanitized as any).rcs_number = payload.rcs_number ?? null;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, 'trust_score')) {
+    (sanitized as any).trust_score = payload.trust_score ?? null;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, 'trust_score_computed_at')) {
+    (sanitized as any).trust_score_computed_at = payload.trust_score_computed_at ?? null;
   }
   if (Object.prototype.hasOwnProperty.call(payload, 'image_url')) {
     sanitized.image_url = payload.image_url ?? null;

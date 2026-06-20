@@ -29,10 +29,10 @@ const ClientGrid: React.FC<{ clients: Client[] }> = ({ clients }) => {
           </div>
           <div className="p-4">
             <h3 className="text-lg font-semibold text-gray-900">{client.name}</h3>
-            {client.company && (
+            {client.company_client && (
               <p className="text-sm text-gray-600 flex items-center mt-1">
                 <Building2 className="h-4 w-4 mr-1" />
-                {client.company}
+                {client.company_client.name}
               </p>
             )}
             {client.email && (

@@ -1,9 +1,10 @@
-import React from 'react';
-import { useForm } from 'react-hook-form';
+import React, { useState } from 'react';
 import { Client, ClientType } from '../../types/client';
+import { AddressSearchInput, Field, Input, Select } from '../ui-kit';
 
 type ClientFormValues = Partial<Client> & {
   company_client_id?: string;
+  billing_same_as_contact?: boolean;
 };
 
 interface ClientFormProps {
@@ -11,147 +12,187 @@ interface ClientFormProps {
   initialData?: Partial<Client>;
   clientType?: ClientType;
   companyOptions?: Client[];
+  onCancel?: () => void;
 }
 
-const ClientForm: React.FC<ClientFormProps> = ({ onSubmit, initialData, clientType = 'person', companyOptions = [] }) => {
-  const {
-    register,
-    handleSubmit,
-    watch,
-    formState: { errors },
-  } = useForm<ClientFormValues>({
-    defaultValues: {
-      ...initialData,
-      client_type: initialData?.client_type ?? clientType,
-      company_client_id: initialData?.company_client_id ?? '',
-    },
-  });
-
-  const selectedCompanyId = watch('company_client_id');
+const ClientForm: React.FC<ClientFormProps> = ({
+  onSubmit,
+  initialData,
+  clientType = 'person',
+  companyOptions = [],
+  onCancel,
+}) => {
   const isCompany = clientType === 'company';
 
-  const submit = (data: ClientFormValues) => {
-    onSubmit({
-      ...data,
-      client_type: clientType,
-      company_client_id: isCompany ? null : (data.company_client_id || null),
-      company: isCompany ? null : (data.company_client_id ? null : (data.company?.trim() || null)),
-    });
+  const [name, setName] = useState(initialData?.name ?? '');
+  const [email, setEmail] = useState(initialData?.email ?? '');
+  const [phone, setPhone] = useState(initialData?.phone ?? '');
+  const [address, setAddress] = useState(initialData?.address ?? '');
+  const [companyClientId, setCompanyClientId] = useState(initialData?.company_client_id ?? '');
+  const [billingSame, setBillingSame] = useState(!initialData?.billing_address);
+  const [billingAddress, setBillingAddress] = useState(initialData?.billing_address ?? '');
+  const [deliveryAddress, setDeliveryAddress] = useState(initialData?.default_delivery_address ?? '');
+  const [saving, setSaving] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim() || saving) return;
+    setSaving(true);
+    try {
+      await onSubmit({
+        name: name.trim(),
+        email: email.trim() || null,
+        phone: phone.trim() || null,
+        address: address.trim() || null,
+        company_client_id: isCompany ? null : (companyClientId || null),
+        billing_address: billingSame ? null : (billingAddress.trim() || null),
+        default_delivery_address: deliveryAddress.trim() || null,
+        client_type: clientType,
+      });
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
-    <form onSubmit={handleSubmit(submit)} className="space-y-6">
-      <div>
-        <label htmlFor="name" className="block text-sm font-medium text-gray-700">
-          {isCompany ? "Nom de l'entreprise *" : 'Nom *'}
-        </label>
-        <input
-          id="name"
-          type="text"
-          {...register('name', { required: 'Name is required' })}
-          className={`mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 ${
-            errors.name ? 'border-red-500' : ''
-          }`}
-        />
-        {errors.name && <p className="text-sm text-red-600">{errors.name.message}</p>}
-      </div>
+    <form onSubmit={handleSubmit} className="space-y-4">
 
-      {!isCompany && (
-        <>
-          <div>
-            <label htmlFor="company_client_id" className="block text-sm font-medium text-gray-700">
-              Entreprise liée
-            </label>
-            <select
-              id="company_client_id"
-              {...register('company_client_id')}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-            >
-              <option value="">Aucune</option>
-              {companyOptions.map((company) => (
-                <option key={company.id} value={company.id}>
-                  {company.name}
-                </option>
-              ))}
-            </select>
-          </div>
+      {/* ── Identité ── */}
+      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-4">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Identité</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Field label={isCompany ? "Nom de l'entreprise *" : 'Nom *'} id="client-name" className="md:col-span-2">
+            <Input
+              id="client-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder={isCompany ? "Nom de l'entreprise" : 'Prénom Nom'}
+              required
+            />
+          </Field>
 
-          {!selectedCompanyId && (
-            <div>
-              <label htmlFor="company" className="block text-sm font-medium text-gray-700">
-                Société
-              </label>
-              <input
-                id="company"
-                type="text"
-                {...register('company')}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-              />
-            </div>
+          {!isCompany && (
+            <>
+              <Field label="Entreprise liée" id="client-company-id">
+                <Select
+                  id="client-company-id"
+                  value={companyClientId}
+                  onChange={(e) => setCompanyClientId(e.target.value)}
+                >
+                  <option value="">Aucune</option>
+                  {companyOptions.map((co) => (
+                    <option key={co.id} value={co.id}>{co.name}</option>
+                  ))}
+                </Select>
+              </Field>
+
+            </>
           )}
-        </>
-      )}
-
-      <div>
-        <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-          {isCompany ? "Email de l'entreprise" : 'Email'}
-        </label>
-        <input
-          id="email"
-          type="email"
-          {...register('email', {
-            pattern: {
-              value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
-              message: 'Invalid email address',
-            },
-          })}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-        />
-        {errors.email && <p className="text-sm text-red-600">{errors.email.message}</p>}
+        </div>
       </div>
 
-      <div>
-        <label htmlFor="phone" className="block text-sm font-medium text-gray-700">
-          {isCompany ? "Téléphone de l'entreprise" : 'Téléphone'}
-        </label>
-        <input
-          id="phone"
-          type="tel"
-          {...register('phone')}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-        />
+      {/* ── Coordonnées ── */}
+      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-4">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Coordonnées</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Field label="Email" id="client-email">
+            <Input
+              id="client-email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="contact@exemple.fr"
+            />
+          </Field>
+          <Field label="Téléphone" id="client-phone">
+            <Input
+              id="client-phone"
+              type="tel"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="06 00 00 00 00"
+            />
+          </Field>
+        </div>
       </div>
 
-      <div>
-        <label htmlFor="address" className="block text-sm font-medium text-gray-700">
-          Adresse
-        </label>
-        <textarea
-          id="address"
-          {...register('address')}
-          rows={3}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-        />
+      {/* ── Adresses ── */}
+      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-4">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Adresses</p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Field label="Adresse de contact" id="client-address">
+            <AddressSearchInput
+              id="client-address"
+              value={address}
+              onChange={setAddress}
+              placeholder="Adresse principale"
+            />
+          </Field>
+
+          <Field
+            label="Adresse de facturation"
+            id="client-billing"
+            helper={
+              <label className="inline-flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer select-none mt-1">
+                <input
+                  type="checkbox"
+                  checked={billingSame}
+                  onChange={(e) => {
+                    setBillingSame(e.target.checked);
+                    if (e.target.checked) setBillingAddress('');
+                  }}
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                Identique à l'adresse de contact
+              </label>
+            }
+          >
+            {billingSame ? (
+              <p className="text-sm text-slate-400 italic py-1">Identique à l'adresse de contact</p>
+            ) : (
+              <AddressSearchInput
+                id="client-billing"
+                value={billingAddress}
+                onChange={setBillingAddress}
+                placeholder="Adresse de facturation"
+              />
+            )}
+          </Field>
+
+          <Field
+            label="Livraison par défaut"
+            id="client-delivery"
+            helper="Pré-remplit le champ livraison lors de la création d'un projet."
+          >
+            <AddressSearchInput
+              id="client-delivery"
+              value={deliveryAddress}
+              onChange={setDeliveryAddress}
+              placeholder="Lieu de livraison habituel"
+            />
+          </Field>
+        </div>
       </div>
 
-      <div>
-        <label htmlFor="image_url" className="block text-sm font-medium text-gray-700">
-          URL de l'image
-        </label>
-        <input
-          id="image_url"
-          type="url"
-          {...register('image_url')}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-        />
+      {/* ── Actions ── */}
+      <div className="flex items-center justify-end gap-3 pt-2">
+        {onCancel && (
+          <button
+            type="button"
+            onClick={onCancel}
+            className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            Annuler
+          </button>
+        )}
+        <button
+          type="submit"
+          disabled={saving || !name.trim()}
+          className="inline-flex items-center justify-center rounded-md bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {saving ? 'Enregistrement…' : isCompany ? "Créer l'entreprise" : 'Créer le client'}
+        </button>
       </div>
-
-      <button
-        type="submit"
-        className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-      >
-        {isCompany ? "Enregistrer l'entreprise" : 'Enregistrer le client'}
-      </button>
     </form>
   );
 };

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Info, Euro, ListChecks, Image as ImageIcon, ArrowLeft, ArrowRight, Save, Package } from 'lucide-react';
+import { Info, Euro, ListChecks, Image as ImageIcon, ArrowLeft, ArrowRight, Save, Package, Globe } from 'lucide-react';
 import { Equipment } from '../../types/equipment';
 import { useForm } from 'react-hook-form';
 import { useWarehouses } from '../../hooks/useWarehouses';
@@ -80,6 +80,7 @@ const EquipmentCreateWizard: React.FC<WizardProps> = ({ onSubmit }) => {
       category_id: '',
       subcategory_id: '',
       internal_location: '',
+      is_public: false,
     }
   });
 
@@ -281,6 +282,7 @@ const EquipmentCreateWizard: React.FC<WizardProps> = ({ onSubmit }) => {
       serial_number: inventoryCategory === 'series' && trimmedSerials.length
         ? trimmedSerials.join(', ')
         : null,
+      is_public: data.is_public ?? false,
     } as Partial<Equipment>;
     let stock: { warehouse_id: string; quantity: number }[] = [];
     if (inventoryCategory === 'series') {
@@ -404,6 +406,24 @@ const EquipmentCreateWizard: React.FC<WizardProps> = ({ onSubmit }) => {
               />
               <div className="mt-2 text-xs text-gray-500">{t('equipment.wizard.fields.description.hint')}</div>
             </div>
+            {companySettings?.features?.client_portal && (
+              <div className="md:col-span-2 flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50/50 px-4 py-3">
+                <div className="flex items-center gap-2.5">
+                  <Globe className="h-4 w-4 text-emerald-600" />
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">Produit public</p>
+                    <p className="text-xs text-gray-500">Visible dans l'espace client pour les demandes de projet</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setValue('is_public', !watch('is_public'))}
+                  className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${watch('is_public') ? 'bg-emerald-500' : 'bg-gray-200'}`}
+                >
+                  <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${watch('is_public') ? 'translate-x-4' : 'translate-x-0'}`} />
+                </button>
+              </div>
+            )}
           </div>
         );
       case 'pricing':

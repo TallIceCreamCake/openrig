@@ -26,6 +26,7 @@ export interface Equipment {
   custom_status_id?: string | null;
   unit_weight_kg?: number | null;
   unit_volume_m3?: number | null;
+  is_public?: boolean;
 }
 
 export interface EquipmentStock {

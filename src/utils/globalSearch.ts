@@ -42,7 +42,6 @@ type ClientSearchRow = {
   name: string | null;
   email: string | null;
   phone: string | null;
-  company: string | null;
 };
 
 type EquipmentSearchRow = {
@@ -326,7 +325,7 @@ const searchClients = async (pattern: string): Promise<GlobalSearchResult[]> => 
     id: row.id,
     kind: 'client',
     title: row.name?.trim() || 'Client',
-    subtitle: row.company?.trim() || row.email?.trim() || null,
+    subtitle: row.email?.trim() || null,
     meta: row.phone?.trim() || null,
     href: `/clients/${row.id}`,
     badge: 'Client',

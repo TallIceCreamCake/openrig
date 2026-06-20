@@ -18,7 +18,7 @@ const getInitials = (name?: string | null) => {
   return joined || '?';
 };
 
-type SortKey = 'name' | 'company' | 'contact';
+type SortKey = 'name' | 'contact';
 
 interface ClientTableProps {
   clients: Client[];
@@ -45,10 +45,6 @@ const ClientTable: React.FC<ClientTableProps> = ({ clients, onBulkDelete, mode =
         case 'name':
           av = (a.name || '').toLowerCase();
           bv = (b.name || '').toLowerCase();
-          break;
-        case 'company':
-          av = (a.company || '').toLowerCase();
-          bv = (b.company || '').toLowerCase();
           break;
         case 'contact':
           av = (a.email || '').toLowerCase();
@@ -166,17 +162,12 @@ const ClientTable: React.FC<ClientTableProps> = ({ clients, onBulkDelete, mode =
               </button>
             </TableHeaderCell>
             <TableHeaderCell className="px-4">
-              <button type="button" onClick={() => toggleSort('company')} className="inline-flex items-center gap-1 text-gray-700 hover:text-gray-900">
-                {mode === 'companies' ? 'Type' : 'Entreprise'}
-                <SortIcon active={sortKey === 'company'} />
-              </button>
-            </TableHeaderCell>
-            <TableHeaderCell className="px-4">
               <button type="button" onClick={() => toggleSort('contact')} className="inline-flex items-center gap-1 text-gray-700 hover:text-gray-900">
                 Contact
                 <SortIcon active={sortKey === 'contact'} />
               </button>
             </TableHeaderCell>
+            <TableHeaderCell className="px-4 text-right w-28">Score</TableHeaderCell>
           </TableRow>
         </TableHead>
         <TableBody>
@@ -223,6 +214,11 @@ const ClientTable: React.FC<ClientTableProps> = ({ clients, onBulkDelete, mode =
                     <div className="ml-3">
                       <div className="flex items-center gap-2">
                         <div className="text-sm font-medium text-gray-900">{client.name}</div>
+                        {client.client_number != null && (
+                          <span className="font-mono text-[11px] text-gray-400">
+                            #{String(client.client_number).padStart(4, '0')}
+                          </span>
+                        )}
                         <span className={cn(
                           'inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium',
                           client.client_type === 'company'
@@ -233,15 +229,48 @@ const ClientTable: React.FC<ClientTableProps> = ({ clients, onBulkDelete, mode =
                         </span>
                       </div>
                       {client.address && <div className="text-xs text-gray-500">{client.address}</div>}
+                      {client.tags && client.tags.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {client.tags.map((tag) => (
+                            <span key={tag} className="inline-flex items-center rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-medium text-violet-700">
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </TableCell>
                 <TableCell className="px-4 py-2 text-sm text-gray-700">
-                  {client.client_type === 'company' ? 'Entreprise' : (client.company || '—')}
-                </TableCell>
-                <TableCell className="px-4 py-2 text-sm text-gray-700">
                   <div>{client.email || '—'}</div>
                   {client.phone && <div className="text-xs text-gray-500">{client.phone}</div>}
+                </TableCell>
+                <TableCell className="px-4 py-2">
+                  {client.client_type === 'person' && (() => {
+                    const s = client.trust_score ?? null;
+                    const c = 2 * Math.PI * 10;
+                    const color = s === null ? '#d1d5db'
+                      : s >= 80 ? '#10b981' : s >= 60 ? '#f59e0b' : s >= 40 ? '#f97316' : '#ef4444';
+                    return (
+                      <div className="flex items-center justify-end gap-1.5" title={s !== null ? `Score de confiance : ${s}/100` : 'Score non calculé'}>
+                        <svg width="20" height="20" viewBox="0 0 26 26" className="-rotate-90">
+                          <circle cx="13" cy="13" r="10" fill="none" stroke="#e5e7eb" strokeWidth="3" />
+                          {s !== null && (
+                            <circle
+                              cx="13" cy="13" r="10" fill="none"
+                              stroke={color} strokeWidth="3"
+                              strokeDasharray={c}
+                              strokeDashoffset={c * (1 - s / 100)}
+                              strokeLinecap="round"
+                            />
+                          )}
+                        </svg>
+                        <span className="text-xs font-semibold tabular-nums" style={{ color }}>
+                          {s !== null ? `${s}/100` : '--/100'}
+                        </span>
+                      </div>
+                    );
+                  })()}
                 </TableCell>
               </TableRow>
             );

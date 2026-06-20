@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Plus, X } from 'lucide-react';
 import { Client } from '../../types/client';
+import { AddressSearchInput, Field, Input } from '../ui-kit';
 
 type CompanyContactDraft = {
   name: string;
@@ -21,86 +22,58 @@ interface CompanyClientFormProps {
   onCancel?: () => void;
 }
 
-const createEmptyDraft = (): CompanyContactDraft => ({
-  name: '',
-  email: '',
-  phone: '',
-  address: '',
-});
+const createEmptyDraft = (): CompanyContactDraft => ({ name: '', email: '', phone: '', address: '' });
 
 const CompanyClientForm: React.FC<CompanyClientFormProps> = ({ clients, onSubmit, onCancel }) => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
-  const [imageUrl, setImageUrl] = useState('');
   const [search, setSearch] = useState('');
   const [selectedClientIds, setSelectedClientIds] = useState<string[]>([]);
   const [newContacts, setNewContacts] = useState<CompanyContactDraft[]>([]);
   const [saving, setSaving] = useState(false);
 
   const availableClients = useMemo(
-    () => clients.filter((client) => client.client_type !== 'company'),
+    () => clients.filter((c) => c.client_type !== 'company'),
     [clients]
   );
 
   const filteredClients = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return availableClients;
-    return availableClients.filter((client) => (
-      (client.name || '').toLowerCase().includes(q)
-      || (client.company || '').toLowerCase().includes(q)
-      || (client.email || '').toLowerCase().includes(q)
+    return availableClients.filter((c) => (
+      (c.name || '').toLowerCase().includes(q)
+      || (c.company || '').toLowerCase().includes(q)
+      || (c.email || '').toLowerCase().includes(q)
     ));
   }, [availableClients, search]);
 
-  const toggleSelection = (clientId: string) => {
-    setSelectedClientIds((prev) => (
-      prev.includes(clientId)
-        ? prev.filter((id) => id !== clientId)
-        : [...prev, clientId]
-    ));
-  };
+  const toggleSelection = (clientId: string) =>
+    setSelectedClientIds((prev) =>
+      prev.includes(clientId) ? prev.filter((id) => id !== clientId) : [...prev, clientId]
+    );
 
-  const updateDraft = (index: number, field: keyof CompanyContactDraft, value: string) => {
-    setNewContacts((prev) => prev.map((draft, draftIndex) => (
-      draftIndex === index ? { ...draft, [field]: value } : draft
-    )));
-  };
+  const updateDraft = (index: number, field: keyof CompanyContactDraft, value: string) =>
+    setNewContacts((prev) => prev.map((d, i) => (i === index ? { ...d, [field]: value } : d)));
 
-  const handleSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    const trimmedName = name.trim();
-    if (!trimmedName || saving) return;
-
-    const normalizedContacts = newContacts
-      .map((draft) => ({
-        name: draft.name.trim(),
-        email: draft.email.trim() || null,
-        phone: draft.phone.trim() || null,
-        address: draft.address.trim() || null,
-      }))
-      .filter((draft) => draft.name);
-
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim() || saving) return;
+    setSaving(true);
     try {
-      setSaving(true);
       await onSubmit({
         company: {
-          name: trimmedName,
+          name: name.trim(),
           email: email.trim() || null,
           phone: phone.trim() || null,
           address: address.trim() || null,
-          image_url: imageUrl.trim() || null,
           client_type: 'company',
         },
         linkedClientIds: selectedClientIds,
-        newClients: normalizedContacts.map((draft) => ({
-          name: draft.name,
-          email: draft.email,
-          phone: draft.phone,
-          address: draft.address,
-          client_type: 'person',
-        })),
+        newClients: newContacts
+          .map((d) => ({ name: d.name.trim(), email: d.email.trim() || null, phone: d.phone.trim() || null, address: d.address.trim() || null, client_type: 'person' as const }))
+          .filter((d) => d.name),
       });
     } finally {
       setSaving(false);
@@ -108,181 +81,148 @@ const CompanyClientForm: React.FC<CompanyClientFormProps> = ({ clients, onSubmit
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="space-y-4">
-          <div>
-            <label htmlFor="company-name" className="block text-sm font-medium text-gray-700">
-              Nom de l'entreprise *
-            </label>
-            <input
+    <form onSubmit={handleSubmit} className="space-y-4">
+
+      {/* ── Identité ── */}
+      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-4">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Identité</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Field label="Nom de l'entreprise *" id="company-name" className="md:col-span-2">
+            <Input
               id="company-name"
-              type="text"
               value={name}
-              onChange={(event) => setName(event.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Ex : ACME Corp"
               required
             />
-          </div>
-
-          <div>
-            <label htmlFor="company-email" className="block text-sm font-medium text-gray-700">
-              Email
-            </label>
-            <input
+          </Field>
+          <Field label="Email" id="company-email">
+            <Input
               id="company-email"
               type="email"
               value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="contact@entreprise.fr"
             />
-          </div>
-
-          <div>
-            <label htmlFor="company-phone" className="block text-sm font-medium text-gray-700">
-              Téléphone
-            </label>
-            <input
+          </Field>
+          <Field label="Téléphone" id="company-phone">
+            <Input
               id="company-phone"
               type="tel"
               value={phone}
-              onChange={(event) => setPhone(event.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="01 00 00 00 00"
             />
-          </div>
-
-          <div>
-            <label htmlFor="company-address" className="block text-sm font-medium text-gray-700">
-              Adresse
-            </label>
-            <textarea
+          </Field>
+          <Field label="Adresse" id="company-address" className="md:col-span-2">
+            <AddressSearchInput
               id="company-address"
-              rows={3}
               value={address}
-              onChange={(event) => setAddress(event.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              onChange={setAddress}
+              placeholder="Adresse de l'entreprise"
             />
-          </div>
-
-          <div>
-            <label htmlFor="company-image-url" className="block text-sm font-medium text-gray-700">
-              Image
-            </label>
-            <input
-              id="company-image-url"
-              type="url"
-              value={imageUrl}
-              onChange={(event) => setImageUrl(event.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-              placeholder="https://..."
-            />
-          </div>
-        </div>
-
-        <div className="space-y-4">
-          <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <h3 className="text-sm font-semibold text-gray-900">Associer des clients existants</h3>
-                <p className="text-xs text-gray-500">Ils deviendront les contacts de cette entreprise.</p>
-              </div>
-              <div className="text-xs font-medium text-gray-500">{selectedClientIds.length} sélectionné(s)</div>
-            </div>
-            <input
-              type="text"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Rechercher un client existant..."
-              className="mt-3 block w-full rounded-md border-gray-300 bg-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
-            />
-            <div className="mt-3 max-h-64 overflow-y-auto rounded-md border border-gray-200 bg-white">
-              {filteredClients.length === 0 ? (
-                <div className="px-3 py-4 text-sm text-gray-500">Aucun client correspondant.</div>
-              ) : (
-                filteredClients.map((client) => (
-                  <label
-                    key={client.id}
-                    className="flex cursor-pointer items-start gap-3 border-b border-gray-100 px-3 py-3 last:border-b-0 hover:bg-gray-50"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedClientIds.includes(client.id)}
-                      onChange={() => toggleSelection(client.id)}
-                      className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                    />
-                    <div className="min-w-0">
-                      <div className="text-sm font-medium text-gray-900">{client.name}</div>
-                      <div className="text-xs text-gray-500">
-                        {client.company || client.email || client.phone || 'Aucune information complémentaire'}
-                      </div>
-                    </div>
-                  </label>
-                ))
-              )}
-            </div>
-          </div>
+          </Field>
         </div>
       </div>
 
-      <div className="rounded-lg border border-gray-200 p-4">
-        <div className="flex items-center justify-between gap-4">
+      {/* ── Interlocuteurs existants ── */}
+      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-3">
+        <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-sm font-semibold text-gray-900">Créer des contacts sur le formulaire</h3>
-            <p className="text-xs text-gray-500">Pratique si les interlocuteurs n'existent pas encore.</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Associer des contacts existants</p>
+            <p className="text-xs text-slate-500 mt-0.5">Ils deviendront les interlocuteurs de cette entreprise.</p>
+          </div>
+          {selectedClientIds.length > 0 && (
+            <span className="text-xs font-medium text-blue-600 bg-blue-50 rounded-full px-2.5 py-1">
+              {selectedClientIds.length} sélectionné{selectedClientIds.length > 1 ? 's' : ''}
+            </span>
+          )}
+        </div>
+        <Input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Rechercher un client existant…"
+        />
+        <div className="max-h-52 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50">
+          {filteredClients.length === 0 ? (
+            <div className="px-4 py-5 text-sm text-slate-400 text-center">Aucun client correspondant.</div>
+          ) : (
+            filteredClients.map((client) => (
+              <label
+                key={client.id}
+                className="flex cursor-pointer items-center gap-3 border-b border-slate-100 px-4 py-2.5 last:border-b-0 hover:bg-white transition-colors"
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedClientIds.includes(client.id)}
+                  onChange={() => toggleSelection(client.id)}
+                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-slate-800">{client.name}</p>
+                  {(client.company || client.email) && (
+                    <p className="text-xs text-slate-500 truncate">{client.company || client.email}</p>
+                  )}
+                </div>
+              </label>
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* ── Nouveaux contacts ── */}
+      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Créer des contacts</p>
+            <p className="text-xs text-slate-500 mt-0.5">Pratique si les interlocuteurs n'existent pas encore.</p>
           </div>
           <button
             type="button"
             onClick={() => setNewContacts((prev) => [...prev, createEmptyDraft()])}
-            className="inline-flex items-center gap-2 rounded-md border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-white transition-colors"
           >
             <Plus className="h-4 w-4" />
-            Ajouter un contact
+            Ajouter
           </button>
         </div>
 
         {newContacts.length > 0 && (
-          <div className="mt-4 space-y-4">
+          <div className="space-y-3">
             {newContacts.map((draft, index) => (
-              <div key={`draft-${index}`} className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <div className="text-sm font-medium text-gray-900">Contact {index + 1}</div>
+              <div key={`draft-${index}`} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-sm font-semibold text-slate-700">Contact {index + 1}</p>
                   <button
                     type="button"
-                    onClick={() => setNewContacts((prev) => prev.filter((_, draftIndex) => draftIndex !== index))}
-                    className="rounded-md p-1 text-gray-400 hover:bg-white hover:text-gray-600"
-                    aria-label="Supprimer ce contact"
+                    onClick={() => setNewContacts((prev) => prev.filter((_, i) => i !== index))}
+                    className="rounded-md p-1 text-slate-400 hover:bg-white hover:text-slate-600"
                   >
                     <X className="h-4 w-4" />
                   </button>
                 </div>
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                  <input
-                    type="text"
+                  <Input
                     value={draft.name}
-                    onChange={(event) => updateDraft(index, 'name', event.target.value)}
-                    placeholder="Nom du contact"
-                    className="rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    onChange={(e) => updateDraft(index, 'name', e.target.value)}
+                    placeholder="Nom *"
                   />
-                  <input
+                  <Input
                     type="email"
                     value={draft.email}
-                    onChange={(event) => updateDraft(index, 'email', event.target.value)}
+                    onChange={(e) => updateDraft(index, 'email', e.target.value)}
                     placeholder="Email"
-                    className="rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                   />
-                  <input
+                  <Input
                     type="tel"
                     value={draft.phone}
-                    onChange={(event) => updateDraft(index, 'phone', event.target.value)}
+                    onChange={(e) => updateDraft(index, 'phone', e.target.value)}
                     placeholder="Téléphone"
-                    className="rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                   />
-                  <input
-                    type="text"
+                  <Input
                     value={draft.address}
-                    onChange={(event) => updateDraft(index, 'address', event.target.value)}
+                    onChange={(e) => updateDraft(index, 'address', e.target.value)}
                     placeholder="Adresse"
-                    className="rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                   />
                 </div>
               </div>
@@ -291,7 +231,8 @@ const CompanyClientForm: React.FC<CompanyClientFormProps> = ({ clients, onSubmit
         )}
       </div>
 
-      <div className="flex items-center justify-end gap-3">
+      {/* ── Actions ── */}
+      <div className="flex items-center justify-end gap-3 pt-2">
         {onCancel && (
           <button
             type="button"
@@ -304,11 +245,9 @@ const CompanyClientForm: React.FC<CompanyClientFormProps> = ({ clients, onSubmit
         <button
           type="submit"
           disabled={saving || !name.trim()}
-          className={`inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-medium text-white ${
-            saving || !name.trim() ? 'bg-blue-300 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
-          }`}
+          className="inline-flex items-center justify-center rounded-md bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {saving ? 'Création...' : "Créer l'entreprise"}
+          {saving ? 'Création…' : "Créer l'entreprise"}
         </button>
       </div>
     </form>

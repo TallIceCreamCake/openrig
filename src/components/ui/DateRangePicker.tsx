@@ -51,6 +51,9 @@ interface DateRangePickerProps {
   singleDay?: boolean;
   singleDayLabel?: string;
   onSingleDayChange?: (value: boolean) => void;
+  accentColor?: 'blue' | 'emerald';
+  vertical?: boolean;
+  hideToggle?: boolean;
 }
 
 type GridDay = {
@@ -70,7 +73,31 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
   singleDay,
   singleDayLabel,
   onSingleDayChange,
+  accentColor = 'blue',
+  vertical = false,
+  hideToggle = false,
 }) => {
+  const accent = accentColor === 'emerald'
+    ? {
+        bg: 'bg-emerald-600',
+        bgHover: 'hover:bg-emerald-700',
+        bgLight: 'bg-emerald-50',
+        text: 'text-emerald-700',
+        focusBorder: 'focus:border-emerald-400',
+        focusRing: 'focus:ring-2 focus:ring-emerald-100',
+        peerRing: 'peer-focus:ring-emerald-300',
+        peerChecked: 'peer-checked:bg-emerald-600',
+      }
+    : {
+        bg: 'bg-blue-600',
+        bgHover: 'hover:bg-blue-700',
+        bgLight: 'bg-blue-50',
+        text: 'text-blue-700',
+        focusBorder: 'focus:border-blue-500',
+        focusRing: 'focus:ring-2 focus:ring-blue-100',
+        peerRing: 'peer-focus:ring-blue-300',
+        peerChecked: 'peer-checked:bg-blue-600',
+      };
   const [open, setOpen] = useState(false);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [selectedStart, setSelectedStart] = useState<Date | null>(() => toDisplayDate(start));
@@ -221,70 +248,119 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
         <label className="mb-2 block text-sm font-semibold text-gray-700">{label}</label>
       )}
       <div className="relative">
-        <div
-          onClick={disabled ? undefined : toggleOpen}
-          className={`flex flex-wrap items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 shadow-sm ${
-            disabled ? 'cursor-not-allowed opacity-60' : ''
-          }`}
-          role="button"
-          tabIndex={disabled ? -1 : 0}
-          onKeyDown={(event) => {
-            if (disabled) return;
-            if (event.key === 'Enter' || event.key === ' ') {
-              event.preventDefault();
-              toggleOpen();
-            }
-          }}
-        >
-          <span className="text-sm font-medium text-gray-500">Du</span>
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              toggleOpen();
-            }}
-            disabled={disabled}
-            className={`min-w-[140px] flex-1 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 text-left text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-100 ${
-              displayStart ? 'text-gray-900' : 'text-gray-400'
+        {vertical ? (
+          <div
+            className={`flex flex-col gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2.5 shadow-sm ${
+              disabled ? 'cursor-not-allowed opacity-60' : ''
             }`}
-            aria-label="Date de début"
           >
-            {displayStart || basePlaceholder}
-          </button>
-          <span className="text-sm font-medium text-gray-500">au</span>
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              toggleOpen();
-            }}
-            disabled={disabled}
-            className={`min-w-[140px] flex-1 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 text-left text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-100 ${
-              displayEnd ? 'text-gray-900' : 'text-gray-400'
+            <div className="flex items-center gap-2">
+              <span className="w-5 text-xs font-semibold text-gray-400 uppercase tracking-wide">Du</span>
+              <button
+                type="button"
+                onClick={(event) => { event.stopPropagation(); toggleOpen(); }}
+                disabled={disabled}
+                className={`flex-1 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 text-left text-sm ${accent.focusBorder} ${accent.focusRing} ${displayStart ? 'text-gray-900' : 'text-gray-400'}`}
+                aria-label="Date de début"
+              >
+                {displayStart || basePlaceholder}
+              </button>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-5 text-xs font-semibold text-gray-400 uppercase tracking-wide">Au</span>
+              <button
+                type="button"
+                onClick={(event) => { event.stopPropagation(); toggleOpen(); }}
+                disabled={disabled}
+                className={`flex-1 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 text-left text-sm ${accent.focusBorder} ${accent.focusRing} ${displayEnd ? 'text-gray-900' : 'text-gray-400'}`}
+                aria-label="Date de fin"
+              >
+                {displayEnd || basePlaceholder}
+              </button>
+              {!hideToggle && (
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    hasSingleDayToggle ? toggleOptions() : toggleOpen();
+                  }}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-gray-100 text-gray-400 hover:bg-gray-50"
+                  aria-label={hasSingleDayToggle ? 'Options' : 'Ouvrir le calendrier'}
+                  disabled={disabled}
+                >
+                  <svg width="14" height="14" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M6 8L10 12L14 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div
+            onClick={disabled ? undefined : toggleOpen}
+            className={`flex flex-wrap items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 shadow-sm ${
+              disabled ? 'cursor-not-allowed opacity-60' : ''
             }`}
-            aria-label="Date de fin"
-          >
-            {displayEnd || basePlaceholder}
-          </button>
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              if (hasSingleDayToggle) {
-                toggleOptions();
-                return;
+            role="button"
+            tabIndex={disabled ? -1 : 0}
+            onKeyDown={(event) => {
+              if (disabled) return;
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                toggleOpen();
               }
-              toggleOpen();
             }}
-            className="ml-auto inline-flex h-9 w-9 items-center justify-center rounded-lg border border-gray-100 text-gray-400 hover:bg-gray-50"
-            aria-label={hasSingleDayToggle ? 'Options' : 'Ouvrir le calendrier'}
-            disabled={disabled}
           >
-            <svg width="14" height="14" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M6 8L10 12L14 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
-        </div>
+            <span className="text-sm font-medium text-gray-500">Du</span>
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                toggleOpen();
+              }}
+              disabled={disabled}
+              className={`min-w-[140px] flex-1 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 text-left text-sm ${accent.focusBorder} ${accent.focusRing} ${
+                displayStart ? 'text-gray-900' : 'text-gray-400'
+              }`}
+              aria-label="Date de début"
+            >
+              {displayStart || basePlaceholder}
+            </button>
+            <span className="text-sm font-medium text-gray-500">au</span>
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                toggleOpen();
+              }}
+              disabled={disabled}
+              className={`min-w-[140px] flex-1 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 text-left text-sm ${accent.focusBorder} ${accent.focusRing} ${
+                displayEnd ? 'text-gray-900' : 'text-gray-400'
+              }`}
+              aria-label="Date de fin"
+            >
+              {displayEnd || basePlaceholder}
+            </button>
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                if (hasSingleDayToggle) {
+                  toggleOptions();
+                  return;
+                }
+                toggleOpen();
+              }}
+              className="ml-auto inline-flex h-9 w-9 items-center justify-center rounded-lg border border-gray-100 text-gray-400 hover:bg-gray-50"
+              aria-label={hasSingleDayToggle ? 'Options' : 'Ouvrir le calendrier'}
+              disabled={disabled}
+            >
+              <svg width="14" height="14" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M6 8L10 12L14 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          </div>
+        )}
         {open && (
           <div className="absolute z-30 mt-2 w-[320px] rounded-2xl border border-gray-200 bg-white shadow-xl">
             <div className="flex items-center justify-between px-5 pt-4">
@@ -353,7 +429,7 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
                 if (isDisabled) {
                   buttonClasses.push('cursor-not-allowed text-gray-300');
                 } else if (isSingleSelection) {
-                  wrapperClasses.push('rounded-full bg-blue-600');
+                  wrapperClasses.push(`rounded-full ${accent.bg}`);
                   buttonClasses.push('text-white');
                 } else if (isRangeStart || isRangeEnd) {
                   if (rangeStart && rangeEnd && !isSameDay(rangeStart, rangeEnd)) {
@@ -361,11 +437,11 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
                   } else {
                     wrapperClasses.push('rounded-full');
                   }
-                  wrapperClasses.push('bg-blue-600');
+                  wrapperClasses.push(accent.bg);
                   buttonClasses.push('text-white');
                 } else if (inRange) {
-                  wrapperClasses.push('bg-blue-50 rounded-none');
-                  buttonClasses.push('text-blue-700');
+                  wrapperClasses.push(`${accent.bgLight} rounded-none`);
+                  buttonClasses.push(accent.text);
                 } else {
                   buttonClasses.push('text-gray-700 hover:bg-gray-100');
                 }
@@ -401,7 +477,7 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
               <button
                 type="button"
                 onClick={handleApply}
-                className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700"
+                className={`rounded-lg ${accent.bg} px-4 py-2 text-xs font-semibold text-white ${accent.bgHover}`}
               >
                 Appliquer
               </button>
@@ -425,7 +501,7 @@ const DateRangePicker: React.FC<DateRangePickerProps> = ({
                     onSingleDayChange?.(event.target.checked);
                   }}
                 />
-                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                  <div className={`w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 ${accent.peerRing} rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all ${accent.peerChecked}`}></div>
                 </label>
               </div>
             </div>

@@ -1,5 +1,6 @@
-import React, { useMemo, useState, useEffect } from 'react';
-import { Plus, X, Search, Filter, Archive, BarChart3 } from 'lucide-react';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Plus, X, Search, Filter, Archive, BarChart3, Inbox, ChevronRight, CheckCircle2, XCircle, ExternalLink } from 'lucide-react';
 import RentalsTable from '../components/rentals/RentalsTable';
 // import RentalCreateTabs from '../components/rentals/RentalCreateTabs';
 import { useRentals } from '../hooks/useRentals';
@@ -20,6 +21,18 @@ import { Users, Package, FileText, MapPin, CheckCircle, Clock, Banknote, FileChe
 import RentalAvailabilityWhatIfModal from '../components/rentals/RentalAvailabilityWhatIfModal';
 
 const startOfMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth(), 1);
+
+type PortalRequest = {
+  id: string;
+  client_id: string;
+  status: 'pending' | 'converted' | 'rejected';
+  start_date: string;
+  end_date: string;
+  message: string | null;
+  equipment_items: { equipment_id: string; name: string; quantity: number }[];
+  created_at: string;
+  clients?: { id: string; name: string; email: string } | null;
+};
 
 const colorToRgb = (value?: string | null) => {
   if (!value) return { r: 37, g: 99, b: 235 };
@@ -93,9 +106,15 @@ const RentalsPage = () => {
   const [restoringArchivedId, setRestoringArchivedId] = useState<string | null>(null);
   const [previewMonth, setPreviewMonth] = useState<Date>(() => startOfMonth(new Date()));
   const [hoveredRental, setHoveredRental] = useState<import('../types/rental').Rental | null>(null);
+  const [showPortalRequests, setShowPortalRequests] = useState(false);
+  const [portalRequests, setPortalRequests] = useState<PortalRequest[]>([]);
+  const [portalRequestsLoading, setPortalRequestsLoading] = useState(false);
+  const [convertingId, setConvertingId] = useState<string | null>(null);
+  const [rejectingId, setRejectingId] = useState<string | null>(null);
   const { user } = useAuth();
   const { t, language } = useTranslation();
   const { settings } = useCompanySettings();
+  const navigate = useNavigate();
 
   const currencyFormatter = useMemo(
     () =>
@@ -131,6 +150,45 @@ const RentalsPage = () => {
 
   const canViewList = hasPerm(user, 'rn_view_list');
   const canCreate = hasPerm(user, 'rn_create');
+
+  const featureClientPortal = Boolean(settings?.features?.client_portal);
+
+  const loadPortalRequests = useCallback(async () => {
+    setPortalRequestsLoading(true);
+    try {
+      const res = await fetch('/api/portal-requests');
+      if (res.ok) setPortalRequests(await res.json());
+    } catch { /* ignore */ }
+    finally { setPortalRequestsLoading(false); }
+  }, []);
+
+  useEffect(() => {
+    if (featureClientPortal) loadPortalRequests();
+  }, [featureClientPortal, loadPortalRequests]);
+
+  const pendingRequests = portalRequests.filter((r) => r.status === 'pending');
+
+  const handleConvertRequest = async (id: string) => {
+    setConvertingId(id);
+    try {
+      const res = await fetch(`/api/portal-requests/${id}/convert`, { method: 'POST' });
+      if (res.ok) {
+        const { rental_id } = await res.json();
+        await loadPortalRequests();
+        navigate(`/rentals/${rental_id}`);
+      }
+    } catch { /* ignore */ }
+    finally { setConvertingId(null); }
+  };
+
+  const handleRejectRequest = async (id: string) => {
+    setRejectingId(id);
+    try {
+      const res = await fetch(`/api/portal-requests/${id}/reject`, { method: 'POST' });
+      if (res.ok) await loadPortalRequests();
+    } catch { /* ignore */ }
+    finally { setRejectingId(null); }
+  };
 
   const checkPaidSelection = async (ids: string[]) => {
     if (!ids.length) return false;
@@ -471,6 +529,20 @@ const RentalsPage = () => {
           )}
         </div>
         <div className="flex items-center gap-2">
+          {featureClientPortal && !showForm && (
+            <button
+              onClick={() => navigate('/portal-requests')}
+              className="relative inline-flex items-center gap-2 px-3 py-2 rounded-md border border-gray-300 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition"
+            >
+              <Inbox className="h-4 w-4" />
+              Demandes
+              {pendingRequests.length > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-emerald-500 text-white text-[10px] font-bold flex items-center justify-center">
+                  {pendingRequests.length > 9 ? '9+' : pendingRequests.length}
+                </span>
+              )}
+            </button>
+          )}
           {!showForm && canCreate && (
             <button
               onClick={() => {
@@ -496,13 +568,97 @@ const RentalsPage = () => {
         </div>
       </div>
 
+      {featureClientPortal && showPortalRequests && !showForm && (
+        <div className="rounded-2xl border border-emerald-200 bg-white shadow-sm overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-emerald-100 bg-emerald-50/60">
+            <div className="flex items-center gap-2">
+              <Inbox className="h-5 w-5 text-emerald-600" />
+              <span className="font-semibold text-slate-800">Demandes clients</span>
+              {pendingRequests.length > 0 && (
+                <span className="inline-flex items-center rounded-full bg-emerald-500 px-2 py-0.5 text-xs font-bold text-white">
+                  {pendingRequests.length} en attente
+                </span>
+              )}
+            </div>
+            <button onClick={() => setShowPortalRequests(false)} className="p-1 text-gray-400 hover:text-gray-600">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          {portalRequestsLoading ? (
+            <div className="p-8 text-center text-sm text-slate-400">Chargement…</div>
+          ) : portalRequests.length === 0 ? (
+            <div className="p-8 text-center text-sm text-slate-400">
+              <Inbox className="h-8 w-8 mx-auto mb-2 opacity-30" />
+              Aucune demande pour le moment.
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-100">
+              {portalRequests.map((req) => (
+                <div key={req.id} className={`flex items-start gap-4 px-5 py-4 ${req.status !== 'pending' ? 'opacity-60' : ''}`}>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <p className="text-sm font-semibold text-slate-800 truncate">{req.clients?.name || 'Client inconnu'}</p>
+                      {req.status === 'pending' && (
+                        <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">En attente</span>
+                      )}
+                      {req.status === 'converted' && (
+                        <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">Converti</span>
+                      )}
+                      {req.status === 'rejected' && (
+                        <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">Refusé</span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-500 mb-1">
+                      {new Date(req.start_date).toLocaleDateString('fr-FR')} → {new Date(req.end_date).toLocaleDateString('fr-FR')}
+                    </p>
+                    <div className="flex flex-wrap gap-1 mb-1">
+                      {req.equipment_items.slice(0, 4).map((item, i) => (
+                        <span key={i} className="inline-flex items-center rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600">
+                          {item.name} ×{item.quantity}
+                        </span>
+                      ))}
+                      {req.equipment_items.length > 4 && (
+                        <span className="text-xs text-slate-400">+{req.equipment_items.length - 4} autres</span>
+                      )}
+                    </div>
+                    {req.message && (
+                      <p className="text-xs text-slate-400 italic line-clamp-1">"{req.message}"</p>
+                    )}
+                  </div>
+                  {req.status === 'pending' && (
+                    <div className="flex flex-col gap-1.5 flex-shrink-0">
+                      <button
+                        onClick={() => handleConvertRequest(req.id)}
+                        disabled={convertingId === req.id}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50 transition"
+                      >
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        {convertingId === req.id ? '…' : 'Créer le projet'}
+                      </button>
+                      <button
+                        onClick={() => handleRejectRequest(req.id)}
+                        disabled={rejectingId === req.id}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-100 disabled:opacity-50 transition"
+                      >
+                        <XCircle className="h-3.5 w-3.5" />
+                        {rejectingId === req.id ? '…' : 'Refuser'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {showForm ? (
         <div className="space-y-4">
           {mode === 'wizard' && (
             <>
               <h2 className="text-lg font-medium">{t('rentals.create.title')}</h2>
               {canCreate ? (
-                <RentalCreateWizard onSubmit={handleSubmit} clients={clients.map((c) => ({ id: c.id, name: c.name, company: c.company }))} />
+                <RentalCreateWizard onSubmit={handleSubmit} clients={clients.map((c) => ({ id: c.id, name: c.name, client_type: c.client_type, company_client_id: c.company_client_id, default_delivery_address: c.default_delivery_address }))} />
               ) : (
                 <div className="bg-white rounded-lg shadow p-6">{t('rentals.create.noPermission')}</div>
               )}

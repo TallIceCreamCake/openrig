@@ -21,7 +21,8 @@ import WeekView from './WeekView';
 import MonthView from './MonthView';
 import DayView from './DayView';
 import CalendarEventCard from './CalendarEventCard';
-import ViewToggle from './ViewToggle';
+import ViewToggle, { type ViewMode } from './ViewToggle';
+import GanttView from './GanttView';
 import { useTranslation } from '../../context/TranslationContext';
 
 interface CalendarViewProps {
@@ -43,7 +44,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [showEventModal, setShowEventModal] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
-  const [viewMode, setViewMode] = useState<'day' | 'week' | 'month'>('week');
+  const [viewMode, setViewMode] = useState<ViewMode>('week');
   const { t, language } = useTranslation();
 
   const locale = useMemo(() => (language === 'en' ? enUS : fr), [language]);
@@ -55,6 +56,8 @@ const CalendarView: React.FC<CalendarViewProps> = ({
       setCurrentDate(subDays(currentDate, 1));
     } else if (viewMode === 'week') {
       setCurrentDate(subWeeks(currentDate, 1));
+    } else if (viewMode === 'gantt') {
+      setCurrentDate(subDays(currentDate, 30));
     } else {
       setCurrentDate(subMonths(currentDate, 1));
     }
@@ -65,6 +68,8 @@ const CalendarView: React.FC<CalendarViewProps> = ({
       setCurrentDate(addDays(currentDate, 1));
     } else if (viewMode === 'week') {
       setCurrentDate(addWeeks(currentDate, 1));
+    } else if (viewMode === 'gantt') {
+      setCurrentDate(addDays(currentDate, 30));
     } else {
       setCurrentDate(addMonths(currentDate, 1));
     }
@@ -163,7 +168,9 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                 ? dayTitle()
                 : viewMode === 'week'
                   ? weekTitle()
-                  : monthTitle()}
+                  : viewMode === 'gantt'
+                    ? `Gantt — ${format(currentDate, 'MMMM yyyy', { locale })}`
+                    : monthTitle()}
             </h2>
           </div>
           <div className="flex items-center space-x-4">
@@ -174,9 +181,9 @@ const CalendarView: React.FC<CalendarViewProps> = ({
             >
               {t('calendar.header.today')}
             </button>
-            <ViewToggle 
-              value={viewMode} 
-              onChange={(mode) => setViewMode(mode)} 
+            <ViewToggle
+              value={viewMode}
+              onChange={(mode) => setViewMode(mode)}
             />
             <div className="flex space-x-2">
               <button
@@ -197,7 +204,16 @@ const CalendarView: React.FC<CalendarViewProps> = ({
       </div>
 
       {/* Calendar Content */}
-      {viewMode === 'day' ? (
+      {viewMode === 'gantt' ? (
+        <div className="h-[700px]">
+          <GanttView
+            events={events}
+            currentDate={currentDate}
+            onNavigateToEvent={onNavigateToEvent}
+            onEventClick={handleEventClick}
+          />
+        </div>
+      ) : viewMode === 'day' ? (
         <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_380px]">
           <div className="min-w-0">
             <DayView
