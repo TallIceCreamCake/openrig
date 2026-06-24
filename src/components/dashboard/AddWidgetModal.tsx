@@ -121,6 +121,33 @@ const WidgetPreview: React.FC<{ widgetId: string }> = ({ widgetId }) => {
           ))}
         </div>
       );
+    case 'finance':
+      return (
+        <div className="flex h-full flex-col justify-center gap-2 px-5">
+          <div className="flex gap-1.5">
+            {['bg-blue-100', 'bg-emerald-100', 'bg-amber-100'].map((c, i) => (
+              <div key={i} className={`h-5 flex-1 rounded ${c}`} />
+            ))}
+          </div>
+          <svg viewBox="0 0 100 32" preserveAspectRatio="none" className="h-10 w-full">
+            <path d="M0 26 L20 18 L40 22 L60 10 L80 14 L100 4" fill="none" stroke="#2563eb" strokeWidth="2" vectorEffect="non-scaling-stroke" />
+            <path d="M0 30 L20 26 L40 24 L60 20 L80 16 L100 12" fill="none" stroke="#10b981" strokeWidth="2" vectorEffect="non-scaling-stroke" />
+          </svg>
+        </div>
+      );
+    case 'quick-actions':
+      return (
+        <div className="grid h-full grid-cols-3 content-center gap-2 px-5">
+          {[['bg-indigo-100', 'bg-indigo-200'], ['bg-lime-100', 'bg-lime-200'], ['bg-sky-100', 'bg-sky-200'], ['bg-teal-100', 'bg-teal-200'], ['bg-emerald-100', 'bg-emerald-200'], ['bg-amber-100', 'bg-amber-200']].map(([tile, icon], i) => (
+            <div key={i} className="flex flex-col items-center gap-1.5 rounded-lg border border-gray-100 bg-white py-2">
+              <div className={`h-6 w-6 rounded-lg ${tile} grid place-items-center`}>
+                <div className={`h-3 w-3 rounded ${icon}`} />
+              </div>
+              <div className="h-1 w-8 rounded-full bg-gray-200" />
+            </div>
+          ))}
+        </div>
+      );
     default:
       return (
         <div className="grid h-full grid-cols-2 content-center gap-2 px-5">

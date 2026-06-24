@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { Responsive, WidthProvider } from 'react-grid-layout';
-import { Link2, Link2Off, Pencil, X } from 'lucide-react';
+import { Link2, Link2Off, Pencil, X, ChevronDown, Check } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
 import { DashboardWidget, WidgetLayout, DashboardWidgetOptions } from '../../types/dashboard';
 import { useTranslation } from '../../context/TranslationContext';
 import { ColorPickerButton } from '../ui-kit';
+import { QUICK_ACTION_GROUPS, QUICK_ACTIONS_BY_ID, DEFAULT_QUICK_ACTION_IDS } from '../../constants/quickActions';
 
 const ResponsiveGridLayout = WidthProvider(Responsive);
 const DEFAULT_CALENDAR_OPTIONS = {
@@ -65,6 +66,11 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
 }) => {
   const { t } = useTranslation();
   const [optionsWidgetId, setOptionsWidgetId] = useState<string | null>(null);
+  const [expandedActionGroups, setExpandedActionGroups] = useState<Record<string, boolean>>({});
+
+  const toggleActionGroup = (groupId: string) => {
+    setExpandedActionGroups((prev) => ({ ...prev, [groupId]: !(prev[groupId] ?? true) }));
+  };
 
   useEffect(() => {
     if (!isEditing) {
@@ -204,6 +210,37 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   };
   const applyUpcomingRentalsOptions = (nextOptions: Record<string, unknown>) => {
     onWidgetOptionsChange?.('upcoming-rentals', nextOptions);
+  };
+  const quickActionsSelectedIds = Array.isArray(widgetOptions?.quickActions?.actionIds)
+    ? widgetOptions!.quickActions!.actionIds!.filter((id) => Boolean(QUICK_ACTIONS_BY_ID[id]))
+    : DEFAULT_QUICK_ACTION_IDS;
+  const quickActionsColumns = ([2, 3, 4, 5] as const).includes(widgetOptions?.quickActions?.columns as never)
+    ? widgetOptions!.quickActions!.columns!
+    : 'auto';
+  const applyQuickActionsOptions = (nextOptions: Record<string, unknown>) => {
+    onWidgetOptionsChange?.('quick-actions', nextOptions);
+  };
+  const toggleQuickAction = (actionId: string) => {
+    const isSelected = quickActionsSelectedIds.includes(actionId);
+    const nextIds = isSelected
+      ? quickActionsSelectedIds.filter((id) => id !== actionId)
+      : [...quickActionsSelectedIds, actionId];
+    applyQuickActionsOptions({ actionIds: nextIds });
+  };
+  const finance = widgetOptions?.finance || {};
+  const financeOptions = {
+    period: finance.period === '6m' || finance.period === 'ytd' ? finance.period : '12m',
+    chartType: finance.chartType === 'line' || finance.chartType === 'bar' ? finance.chartType : 'area',
+    showInvoiced: finance.showInvoiced !== false,
+    showCollected: finance.showCollected !== false,
+    showKpiInvoiced: finance.showKpiInvoiced !== false,
+    showKpiCollected: finance.showKpiCollected !== false,
+    showKpiOutstanding: finance.showKpiOutstanding !== false,
+    showKpiOverdue: finance.showKpiOverdue !== false,
+    showOverdueList: finance.showOverdueList !== false,
+  };
+  const applyFinanceOptions = (nextOptions: Record<string, unknown>) => {
+    onWidgetOptionsChange?.('finance', nextOptions);
   };
   const optionsModalContent = optionsWidgetId ? (
     <div className="fixed inset-0 z-[12000] overflow-y-auto">
@@ -733,6 +770,193 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
                   </div>
                 </section>
               </>
+            ) : optionsWidgetId === 'quick-actions' && onWidgetOptionsChange ? (
+              <>
+                <section className="rounded-lg border border-gray-200 p-3">
+                  <p className="text-sm font-medium text-gray-700">Colonnes</p>
+                  <div className="mt-2 grid grid-cols-5 gap-2">
+                    {(['auto', 2, 3, 4, 5] as const).map((value) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => applyQuickActionsOptions({ columns: value })}
+                        className={`rounded-md border px-2 py-2 text-sm font-medium transition-colors ${
+                          quickActionsColumns === value
+                            ? 'border-blue-600 bg-blue-50 text-blue-700'
+                            : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        {value === 'auto' ? 'Auto' : value}
+                      </button>
+                    ))}
+                  </div>
+                </section>
+
+                <p className="px-1 text-xs text-gray-500">
+                  {quickActionsSelectedIds.length} raccourci{quickActionsSelectedIds.length > 1 ? 's' : ''} sélectionné{quickActionsSelectedIds.length > 1 ? 's' : ''}
+                </p>
+
+                {QUICK_ACTION_GROUPS.map((group) => {
+                  const isOpen = expandedActionGroups[group.id] ?? true;
+                  const selectedCount = group.actions.filter((action) => quickActionsSelectedIds.includes(action.id)).length;
+                  return (
+                    <section key={group.id} className="overflow-hidden rounded-lg border border-gray-200">
+                      <button
+                        type="button"
+                        onClick={() => toggleActionGroup(group.id)}
+                        aria-expanded={isOpen}
+                        className="flex w-full items-center justify-between gap-2 bg-gray-50 px-3 py-2.5 text-left transition-colors hover:bg-gray-100"
+                      >
+                        <span className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                          {group.label}
+                          {selectedCount > 0 && (
+                            <span className="rounded-full bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">
+                              {selectedCount}
+                            </span>
+                          )}
+                        </span>
+                        <ChevronDown className={`h-4 w-4 flex-shrink-0 text-gray-400 transition-transform ${isOpen ? '' : '-rotate-90'}`} />
+                      </button>
+                      {isOpen && (
+                        <div className="grid grid-cols-1 gap-1.5 p-2 sm:grid-cols-2">
+                          {group.actions.map((action) => {
+                            const Icon = action.icon;
+                            const selected = quickActionsSelectedIds.includes(action.id);
+                            return (
+                              <button
+                                key={action.id}
+                                type="button"
+                                onClick={() => toggleQuickAction(action.id)}
+                                className={`flex items-center gap-2.5 rounded-lg border px-2.5 py-2 text-left transition-colors ${
+                                  selected
+                                    ? 'border-blue-300 bg-blue-50'
+                                    : 'border-gray-200 bg-white hover:bg-gray-50'
+                                }`}
+                              >
+                                <span className={`grid h-8 w-8 flex-shrink-0 place-items-center rounded-lg ${action.tone}`}>
+                                  <Icon className="h-4 w-4" />
+                                </span>
+                                <span className="flex-1 truncate text-sm text-gray-700">{action.label}</span>
+                                <span
+                                  className={`grid h-5 w-5 flex-shrink-0 place-items-center rounded-md border transition-colors ${
+                                    selected ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300 bg-white text-transparent'
+                                  }`}
+                                >
+                                  <Check className="h-3.5 w-3.5" />
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </section>
+                  );
+                })}
+              </>
+            ) : optionsWidgetId === 'finance' && onWidgetOptionsChange ? (
+              <>
+                <section className="rounded-lg border border-gray-200 p-3">
+                  <p className="text-sm font-medium text-gray-700">Période</p>
+                  <div className="mt-2 grid grid-cols-3 gap-2">
+                    {([['6m', '6 mois'], ['12m', '12 mois'], ['ytd', 'Année']] as const).map(([value, label]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => applyFinanceOptions({ period: value })}
+                        className={`rounded-md border px-2 py-2 text-sm font-medium transition-colors ${
+                          financeOptions.period === value
+                            ? 'border-blue-600 bg-blue-50 text-blue-700'
+                            : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </section>
+
+                <section className="rounded-lg border border-gray-200 p-3">
+                  <p className="text-sm font-medium text-gray-700">Type de graphique</p>
+                  <div className="mt-2 grid grid-cols-3 gap-2">
+                    {([['area', 'Aires'], ['line', 'Lignes'], ['bar', 'Barres']] as const).map(([value, label]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => applyFinanceOptions({ chartType: value })}
+                        className={`rounded-md border px-2 py-2 text-sm font-medium transition-colors ${
+                          financeOptions.chartType === value
+                            ? 'border-blue-600 bg-blue-50 text-blue-700'
+                            : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </section>
+
+                <section className="rounded-lg border border-gray-200 p-3">
+                  <p className="text-sm font-medium text-gray-700">Courbes affichées</p>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    {([['showInvoiced', 'Facturé'], ['showCollected', 'Encaissé']] as const).map(([key, label]) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => applyFinanceOptions({ [key]: !financeOptions[key] })}
+                        className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
+                          financeOptions[key]
+                            ? 'border-blue-600 bg-blue-50 text-blue-700'
+                            : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </section>
+
+                <section className="rounded-lg border border-gray-200 p-3">
+                  <p className="text-sm font-medium text-gray-700">Indicateurs</p>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    {([
+                      ['showKpiInvoiced', 'Facturé'],
+                      ['showKpiCollected', 'Encaissé'],
+                      ['showKpiOutstanding', 'En attente'],
+                      ['showKpiOverdue', 'En retard'],
+                    ] as const).map(([key, label]) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => applyFinanceOptions({ [key]: !financeOptions[key] })}
+                        className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
+                          financeOptions[key]
+                            ? 'border-blue-600 bg-blue-50 text-blue-700'
+                            : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </section>
+
+                <section className="rounded-lg border border-gray-200 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-medium text-gray-700">Liste des factures en retard</p>
+                    <button
+                      type="button"
+                      onClick={() => applyFinanceOptions({ showOverdueList: !financeOptions.showOverdueList })}
+                      className={`rounded-md border px-3 py-1.5 text-sm font-medium transition-colors ${
+                        financeOptions.showOverdueList
+                          ? 'border-blue-600 bg-blue-50 text-blue-700'
+                          : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+                      }`}
+                    >
+                      {financeOptions.showOverdueList ? 'Affichée' : 'Masquée'}
+                    </button>
+                  </div>
+                </section>
+              </>
             ) : (
               <p className="text-sm text-gray-500">Aucune option disponible pour ce widget.</p>
             )}
@@ -772,7 +996,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       >
         {activeWidgets.map((widget) => {
           const WidgetComponent = widget.component;
-          const canConfigure = (widget.id === 'calendar' || widget.id === 'clock-date' || widget.id === 'upcoming-rentals') && Boolean(onWidgetOptionsChange);
+          const canConfigure = (widget.id === 'calendar' || widget.id === 'clock-date' || widget.id === 'upcoming-rentals' || widget.id === 'quick-actions' || widget.id === 'finance') && Boolean(onWidgetOptionsChange);
           return (
             <div
               key={widget.id}

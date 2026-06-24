@@ -15,6 +15,18 @@ const ServicesPage: React.FC = () => {
   useEffect(() => { setSearchParams({ tab: activeTab }, { replace: true }); }, [activeTab]);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [createCategory, setCreateCategory] = useState<'insurance' | 'other'>('insurance');
+  // Open the create form when arriving via a quick-action shortcut
+  // (/services?new=other or ?new=insurance). Read once on mount before the tab
+  // effect above rewrites the query string.
+  useEffect(() => {
+    const requested = searchParams.get('new');
+    if (requested === 'other' || requested === 'insurance') {
+      setActiveTab(requested);
+      setCreateCategory(requested);
+      setIsCreateOpen(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const { services, loading, createService, deleteService, deleteServicesBulk } = useServices();
   const insuranceServices = useMemo(
     () => services.filter((service) => service.category === 'insurance'),

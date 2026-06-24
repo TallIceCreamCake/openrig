@@ -19,6 +19,7 @@ import { formatEquipmentStatusLabelForItem } from '../utils/equipmentStatus';
 import { useCompanySettings } from '../hooks/useCompanySettings';
 import { isAutoEntrepreneurMode } from '../utils/accountingMode';
 import { StepTransition } from '../components/ui-kit';
+import SubrentalsTab from '../components/equipment/SubrentalsTab';
 
 const EquipmentPage = () => {
   const { t, language } = useTranslation();
@@ -35,11 +36,22 @@ const EquipmentPage = () => {
   const [query, setQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
-  const [activeTab, setActiveTab] = useState<'equipment' | 'packs'>(() => {
+  const [activeTab, setActiveTab] = useState<'equipment' | 'packs' | 'subrentals'>(() => {
     const t = searchParams.get('tab');
-    return t === 'packs' ? 'packs' : 'equipment';
+    return t === 'packs' ? 'packs' : t === 'subrentals' ? 'subrentals' : 'equipment';
   });
   useEffect(() => { setSearchParams({ tab: activeTab }, { replace: true }); }, [activeTab]);
+  // Open the create flow automatically when arriving via a quick-action shortcut
+  // (/equipment?new=equipment or ?new=pack). Read once on mount before the tab
+  // effect above rewrites the query string.
+  useEffect(() => {
+    const requested = searchParams.get('new');
+    if (requested === 'equipment' || requested === 'pack') {
+      setActiveTab(requested === 'pack' ? 'packs' : 'equipment');
+      setCreateMode(requested);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [statusFilters, setStatusFilters] = useState<Set<EquipmentStatus>>(new Set());
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
   const [selectedSubcategoryId, setSelectedSubcategoryId] = useState<string>('');
@@ -497,7 +509,7 @@ const EquipmentPage = () => {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3 flex-1">
           <h1 className="text-2xl font-semibold text-gray-900">{t('equipment.list.title')}</h1>
-          {!showForm && (
+          {!showForm && activeTab !== 'subrentals' && (
             <div className="relative w-full max-w-xs">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
               <input
@@ -518,7 +530,7 @@ const EquipmentPage = () => {
               )}
             </div>
           )}
-          {!showForm && (
+          {!showForm && activeTab !== 'subrentals' && (
             <div className="relative">
               <button
                 type="button"
@@ -627,7 +639,7 @@ const EquipmentPage = () => {
           )}
         </div>
         <div className="flex items-center gap-2">
-          {!showForm && activeTab === 'equipment' && (
+          {!showForm && activeTab === 'equipment' && activeTab !== 'subrentals' && (
             <button
               type="button"
               onClick={() => setShowCycleInventoryModal(true)}
@@ -637,7 +649,7 @@ const EquipmentPage = () => {
               Inventaires tournants
             </button>
           )}
-          {!showForm && canCreate && (
+          {!showForm && canCreate && activeTab !== 'subrentals' && (
             activeTab === 'equipment' ? (
               <button
                 onClick={() => setCreateMode('equipment')}
@@ -696,6 +708,18 @@ const EquipmentPage = () => {
           >
             {t('equipment.list.tabs.packs')}
           </button>
+          <button
+            type="button"
+            onClick={() => !showForm && setActiveTab('subrentals')}
+            disabled={showForm}
+            className={`py-3 px-1 border-b-2 text-sm font-medium ${
+              activeTab === 'subrentals'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            } ${showForm ? 'cursor-default opacity-60' : ''}`}
+          >
+            Sous-locations
+          </button>
         </nav>
       </div>
 
@@ -713,6 +737,8 @@ const EquipmentPage = () => {
               <div className="bg-white rounded-lg shadow p-6">{t('equipment.list.createWizard.noPermission')}</div>
             )}
           </div>
+        ) : activeTab === 'subrentals' ? (
+          <SubrentalsTab />
         ) : (
           <div className="flex flex-col gap-6 xl:flex-row xl:items-start">
             <div className="xl:basis-[78%] xl:max-w-[78%] flex flex-col min-h-[calc(100vh-200px)] gap-4">

@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Plus, X, Search, Filter, Archive, BarChart3, Inbox, ChevronRight, CheckCircle2, XCircle, ExternalLink } from 'lucide-react';
 import RentalsTable from '../components/rentals/RentalsTable';
 // import RentalCreateTabs from '../components/rentals/RentalCreateTabs';
@@ -66,6 +66,7 @@ const DEFAULT_STATUS_FILTER: Array<'pending' | 'confirmed' | 'preparing' | 'in_p
 ];
 
 const RentalsPage = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [showForm, setShowForm] = useState(false);
   const [mode, setMode] = useState<'wizard'>('wizard');
   const [showCancel, setShowCancel] = useState(false);
@@ -113,6 +114,16 @@ const RentalsPage = () => {
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const { user } = useAuth();
   const { t, language } = useTranslation();
+
+  // Open the create wizard automatically when arriving via a quick-action
+  // shortcut (e.g. /rentals?new=1), then drop the param.
+  useEffect(() => {
+    if (searchParams.get('new')) {
+      setShowForm(true);
+      searchParams.delete('new');
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
   const { settings } = useCompanySettings();
   const navigate = useNavigate();
 

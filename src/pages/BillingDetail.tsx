@@ -7,6 +7,12 @@ import { StatusBadge, type BadgeTone } from '../components/ui-kit';
 import { useCompanySettings } from '../hooks/useCompanySettings';
 import { isAutoEntrepreneurMode } from '../utils/accountingMode';
 import InvoiceFinancialPanel from '../components/billing/InvoiceFinancialPanel';
+import {
+  effectiveStatus,
+  daysOverdue,
+  computeLatePenalty,
+  STATUS_LABELS as SHARED_STATUS_LABELS,
+} from '../utils/billingStatus';
 
 interface BillingDocument {
   id: string;
@@ -311,8 +317,12 @@ const BillingDetailPage: React.FC = () => {
     );
   }
 
-  const statusMeta = STATUS_LABELS[billingDoc.status] || STATUS_LABELS.draft;
+  const effStatus = effectiveStatus(billingDoc);
+  const statusMeta = STATUS_LABELS[effStatus] || SHARED_STATUS_LABELS[effStatus] || STATUS_LABELS[billingDoc.status] || STATUS_LABELS.draft;
   const quoteStatusMeta = QUOTE_STATUS_LABELS[billingDoc.quote_status || 'none'] || QUOTE_STATUS_LABELS.none;
+  const overdueDays = daysOverdue(billingDoc);
+  const latePenalty = overdueDays > 0 ? computeLatePenalty(billingDoc) : 0;
+  const currencyFmt = (value: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(value || 0);
   const lines: BillingLineMeta[] = lineItems.length > 0
     ? lineItems
     : (Array.isArray(parsedMetadata?.lines) ? (parsedMetadata!.lines as BillingLineMeta[]) : []);
@@ -386,6 +396,20 @@ const BillingDetailPage: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {overdueDays > 0 && (
+        <div className="flex flex-col gap-1 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm font-medium text-rose-800">
+            Paiement en retard de <span className="font-bold">{overdueDays} jour{overdueDays > 1 ? 's' : ''}</span>
+            {' · '}solde dû {currencyFmt(billingDoc.balance_due ?? Math.max((billingDoc.amount_ttc || 0) - (billingDoc.paid_amount || 0), 0))}
+          </p>
+          {latePenalty > 0 && (
+            <p className="text-xs text-rose-700">
+              Pénalités de retard estimées (taux légal) : <span className="font-semibold">{currencyFmt(latePenalty)}</span>
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         <section className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-5 shadow-sm space-y-4">

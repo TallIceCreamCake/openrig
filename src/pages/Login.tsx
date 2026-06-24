@@ -143,10 +143,6 @@ const LoginPage: React.FC = () => {
   const getPostLoginTarget = (mustChangePassword: boolean) =>
     resolvePostLoginPath(mustChangePassword, interfaceMode);
 
-  if (user) {
-    return <Navigate to={getPostLoginTarget(user.must_change_password)} replace />;
-  }
-
   const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const resetExpiryDisplay = resetExpiresAt ? new Date(resetExpiresAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : null;
   const displayedResetCode = resetCode.padEnd(6, '•').slice(0, 6).split('');
@@ -495,6 +491,12 @@ const LoginPage: React.FC = () => {
     }
     goToStep(3);
   };
+
+  // Redirect once authenticated. Placed after every hook so the hook order
+  // stays stable across renders (rules-of-hooks).
+  if (user) {
+    return <Navigate to={getPostLoginTarget(user.must_change_password)} replace />;
+  }
 
   return (
     <div className={`login-page-bg animate-login-background relative min-h-screen flex items-center justify-center px-4 py-8 sm:py-10 ${fromFirstLogin ? 'animate-fade-in-from-login' : ''}`}>

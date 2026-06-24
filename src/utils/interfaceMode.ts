@@ -25,10 +25,21 @@ export const setPreferredInterfaceMode = (mode: InterfaceMode) => {
   }
 };
 
+// iPad must always get the full desktop interface. Detect it both via the
+// classic "iPad" user-agent and modern iPadOS (13+) which reports a Mac
+// user-agent but exposes a touch screen (platform MacIntel + maxTouchPoints).
+export const isIpadDevice = () => {
+  if (typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent || '';
+  if (/iPad/i.test(ua)) return true;
+  return navigator.platform === 'MacIntel' && (navigator.maxTouchPoints ?? 0) > 1;
+};
+
 export const shouldUseMobileInterface = () => {
   if (typeof window === 'undefined') return false;
+  if (isIpadDevice()) return false;
   const ua = navigator.userAgent || '';
-  const isMobileUa = /Android|iPhone|iPad|iPod|Mobile|IEMobile|Opera Mini/i.test(ua);
+  const isMobileUa = /Android|iPhone|iPod|Mobile|IEMobile|Opera Mini/i.test(ua);
   const isSmallScreen = window.matchMedia?.('(max-width: 900px)')?.matches ?? window.innerWidth <= 900;
   return isMobileUa && isSmallScreen;
 };

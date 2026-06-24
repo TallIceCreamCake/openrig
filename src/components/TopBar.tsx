@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Bell, Settings, Building2, LogOut, ChevronDown, X, HelpCircle } from 'lucide-react';
+import { Search, Bell, Settings, Building2, LogOut, ChevronDown, X, HelpCircle, Sun, Moon } from 'lucide-react';
+import { applyTheme, resolveTheme } from '../utils/theme';
 import GlobalSearchDropdown from './search/GlobalSearchDropdown';
 import NotificationCenter from './notifications/NotificationCenter';
 import HelpPanel from './help/HelpPanel';
@@ -81,6 +82,7 @@ const TopBar = () => {
   const [isSearching, setIsSearching] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const [isDark, setIsDark] = useState(() => resolveTheme() === 'dark');
   const [tabSearchClosing, setTabSearchClosing] = useState(false);
   const searchOverlayRef = useRef<HTMLDivElement>(null);
   const searchOverlayInputRef = useRef<HTMLInputElement>(null);
@@ -322,6 +324,21 @@ const TopBar = () => {
 
           {/* Right icons */}
           <div className="flex items-center gap-3 flex-shrink-0">
+            {/* Theme toggle */}
+            <button
+              type="button"
+              onClick={() => {
+                const next = isDark ? 'light' : 'dark';
+                setIsDark(!isDark);
+                applyTheme(next);
+                try { localStorage.setItem('ui_theme', next); } catch {}
+              }}
+              className="topbar-icon-btn relative p-2 rounded-full focus:outline-none transition-colors"
+              title={isDark ? 'Passer en mode clair' : 'Passer en mode sombre'}
+            >
+              {isDark ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+            </button>
+
             {/* Help */}
             <div className="relative">
               <button

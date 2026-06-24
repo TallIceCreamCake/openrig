@@ -200,7 +200,7 @@ const Sidebar = () => {
       <aside
         className={`
           sidebar-shell fixed md:relative inset-y-0 left-0 z-40
-          flex flex-col transition-all duration-300 ease-in-out
+          flex flex-col min-h-0 transition-all duration-300 ease-in-out
           md:my-3 md:ml-3 rounded-r-2xl md:rounded-2xl
           border-r md:border
           ${isMobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
@@ -227,7 +227,7 @@ const Sidebar = () => {
         <div className="sidebar-header-divider" aria-hidden="true" />
 
         {/* Navigation */}
-        <nav className={`sidebar-scroll sidebar-fade flex-1 py-3 space-y-1 overflow-y-auto overflow-x-hidden ${showLabels ? 'px-3' : 'px-2'}`}>
+        <nav className={`sidebar-scroll sidebar-fade flex-1 min-h-0 py-3 space-y-1 overflow-y-auto overflow-x-hidden ${showLabels ? 'px-3' : 'px-2'}`}>
           {renderNavigation()}
         </nav>
 

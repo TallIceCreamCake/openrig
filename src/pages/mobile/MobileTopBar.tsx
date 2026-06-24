@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Bell, Home, Search } from 'lucide-react';
+import { ArrowLeft, Bell, Home, Moon, Search, Sun } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { applyTheme, resolveTheme } from '../../utils/theme';
 import SearchDropdown from '../../components/equipment/SearchDropdown';
 import NotificationCenter from '../../components/notifications/NotificationCenter';
 import { useNotifications } from '../../hooks/useNotifications';
@@ -27,6 +28,7 @@ const MobileTopBar: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
   const [results, setResults] = useState<SearchItem[]>([]);
+  const [isDark, setIsDark] = useState(() => resolveTheme() === 'dark');
   const {
     notifications,
     unreadCount,
@@ -163,6 +165,23 @@ const MobileTopBar: React.FC = () => {
               />
             )}
           </div>
+          {/* Theme toggle */}
+          <button
+            type="button"
+            onClick={() => {
+              const next = isDark ? 'light' : 'dark';
+              setIsDark(!isDark);
+              applyTheme(next);
+              try { localStorage.setItem('ui_theme', next); } catch {}
+            }}
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 shadow-sm transition-all active:scale-[.98]"
+            aria-label={isDark ? 'Mode clair' : 'Mode sombre'}
+          >
+            {isDark
+              ? <Sun className="h-5 w-5 text-amber-500" />
+              : <Moon className="h-5 w-5 text-slate-500" />}
+          </button>
+
           <button
             type="button"
             onClick={() => setIsOpen(!isOpen)}

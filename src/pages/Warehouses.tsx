@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Plus, Search, Filter, X } from 'lucide-react';
 import WarehouseTable from '../components/warehouses/WarehouseTable';
 import WarehouseForm from '../components/warehouses/WarehouseForm';
@@ -8,7 +9,16 @@ import { useTranslation } from '../context/TranslationContext';
 
 const WarehousesPage = () => {
   const { t } = useTranslation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [showForm, setShowForm] = useState(false);
+  // Open the create form when arriving via a quick-action shortcut (/warehouses?new=1).
+  useEffect(() => {
+    if (searchParams.get('new')) {
+      setShowForm(true);
+      searchParams.delete('new');
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
   const { warehouses, loading, addWarehouse, deleteWarehousesBulk } = useWarehouses();
   const [query, setQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);

@@ -65,10 +65,29 @@ export interface UpcomingRentalsWidgetOptions {
   sortOrder?: UpcomingRentalsSortOrder;
 }
 
+export interface QuickActionsWidgetOptions {
+  actionIds?: string[];
+  columns?: 'auto' | 2 | 3 | 4 | 5;
+}
+
+export interface FinanceWidgetOptions {
+  period?: '6m' | '12m' | 'ytd';
+  chartType?: 'line' | 'bar' | 'area';
+  showInvoiced?: boolean;
+  showCollected?: boolean;
+  showKpiInvoiced?: boolean;
+  showKpiCollected?: boolean;
+  showKpiOutstanding?: boolean;
+  showKpiOverdue?: boolean;
+  showOverdueList?: boolean;
+}
+
 export interface DashboardWidgetOptions {
   calendar?: CalendarWidgetOptions;
   clock?: ClockWidgetOptions;
   upcomingRentals?: UpcomingRentalsWidgetOptions;
+  quickActions?: QuickActionsWidgetOptions;
+  finance?: FinanceWidgetOptions;
 }
 
 export interface DashboardState {

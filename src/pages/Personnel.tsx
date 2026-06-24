@@ -20,6 +20,16 @@ const PersonnelPage = () => {
     return t === 'services' ? 'services' : 'team';
   });
   useEffect(() => { setSearchParams({ tab: activeTab }, { replace: true }); }, [activeTab]);
+  // Open the crew create wizard when arriving via a quick-action shortcut
+  // (/personnel?new=crew). Read once on mount before the tab effect above
+  // rewrites the query string.
+  useEffect(() => {
+    if (searchParams.get('new') === 'crew') {
+      setActiveTab('team');
+      setShowCreateCrew(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [isCreateServiceOpen, setIsCreateServiceOpen] = useState(false);
   const { personnel, activities, loading: personnelLoading, deletePersonnelBulk, refetchPersonnel } = usePersonnel();
   const {

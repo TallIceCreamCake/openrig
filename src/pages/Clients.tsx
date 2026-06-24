@@ -16,6 +16,17 @@ const ClientsPage = () => {
   });
   useEffect(() => { setSearchParams({ tab: activeTab }, { replace: true }); }, [activeTab]);
   const [showForm, setShowForm] = useState(false);
+  // Open the create form automatically when arriving via a quick-action shortcut
+  // (/clients?new=client or ?new=company). Read once on mount before the tab
+  // effect above rewrites the query string.
+  useEffect(() => {
+    const requested = searchParams.get('new');
+    if (requested === 'client' || requested === 'company') {
+      setActiveTab(requested === 'company' ? 'companies' : 'clients');
+      setShowForm(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const { clients, loading, addClient, deleteClientsBulk, createCompanyClient } = useClients();
   const [query, setQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);

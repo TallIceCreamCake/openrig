@@ -8,6 +8,7 @@ import BugReportLauncher from './bug-reports/BugReportLauncher';
 import { useAuth } from '../context/AuthContext';
 import StepTransition from './ui-kit/StepTransition';
 import { TabsProvider } from '../context/TabsContext';
+import { shouldUseMobileInterface } from '../utils/interfaceMode';
 
 const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { logout } = useAuth();
@@ -23,10 +24,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const ua = navigator.userAgent || '';
-    const isMobileUa = /Android|iPhone|iPad|iPod|Mobile|IEMobile|Opera Mini/i.test(ua);
-    const isSmallScreen = window.matchMedia?.('(max-width: 900px)')?.matches ?? window.innerWidth <= 900;
-    if (!isMobileUa || !isSmallScreen) return;
+    if (!shouldUseMobileInterface()) return;
 
     const path = location.pathname || '/';
     const allowed =
@@ -42,6 +40,10 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       || path === '/m/materiel'
       || path === '/m/accessoires'
       || path === '/m/account'
+      || path === '/m/scan'
+      || path === '/m/projets'
+      || path === '/m/taches'
+      || path === '/m/sinistre'
       || path.startsWith('/m/preparations/')
       || path.startsWith('/m/livraisons/')
       || path.startsWith('/m/retours/')
@@ -49,7 +51,8 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       || path.startsWith('/m/clients/')
       || path.startsWith('/m/materiel/')
       || path.startsWith('/m/accessoires/')
-      || path.startsWith('/m/prestations/');
+      || path.startsWith('/m/prestations/')
+      || path.startsWith('/m/projets/');
 
     if (!allowed) {
       navigate('/m', { replace: true });
@@ -70,9 +73,9 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
   return (
     <TabsProvider>
-    <div className="flex h-screen bg-gray-100 relative">
+    <div className="flex h-[100dvh] bg-gray-100 relative overflow-hidden">
       <Sidebar />
-      <div className="flex-1 flex flex-col overflow-hidden md:ml-0">
+      <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden md:ml-0">
         <ChatNotificationListener />
         {isTemplateStudioRoute ? <TemplateStudioTopBar /> : <TopBar />}
         <main

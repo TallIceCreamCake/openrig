@@ -21,6 +21,7 @@ import { toast } from 'react-hot-toast';
 import { StatusBadge, type BadgeTone } from '../components/ui-kit';
 import { useCompanySettings } from '../hooks/useCompanySettings';
 import { checkSellerCompliance } from '../utils/einvoicing';
+import { STATUS_LABELS, QUOTE_STATUS_LABELS, isOverdue, effectiveStatus } from '../utils/billingStatus';
 
 interface BillingDocument {
   id: string;
@@ -51,24 +52,6 @@ type DocTab = 'invoices' | 'quotes' | 'credit_notes';
 type PeriodFilter = 'all' | 'month' | 'quarter' | 'year';
 type StatusFilter = 'all' | 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled';
 
-const STATUS_LABELS: Record<string, { label: string; tone: BadgeTone }> = {
-  draft: { label: 'Brouillon', tone: 'gray' },
-  sent: { label: 'Envoyée', tone: 'blue' },
-  paid: { label: 'Payée', tone: 'emerald' },
-  partially_paid: { label: 'Partiellement payée', tone: 'amber' },
-  overdue: { label: 'En retard', tone: 'rose' },
-  cancelled: { label: 'Annulée', tone: 'slate' },
-};
-
-const QUOTE_STATUS_LABELS: Record<string, { label: string; tone: BadgeTone }> = {
-  draft: { label: 'Brouillon', tone: 'gray' },
-  sent: { label: 'Envoyé', tone: 'blue' },
-  accepted: { label: 'Accepté', tone: 'emerald' },
-  declined: { label: 'Refusé', tone: 'rose' },
-  expired: { label: 'Expiré', tone: 'slate' },
-  invoiced: { label: 'Facturé', tone: 'indigo' },
-};
-
 const DOC_TYPE_LABELS: Record<string, string> = {
   invoice: 'Facture',
   deposit_invoice: "Facture d'acompte",
@@ -80,20 +63,6 @@ const formatCurrency = (value: number) =>
   new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(value || 0);
 const formatDate = (value: string | null | undefined) =>
   !value ? '—' : new Date(value).toLocaleDateString('fr-FR');
-
-const isOverdue = (doc: BillingDocument) =>
-  doc.status === 'sent'
-  && (doc.balance_due ?? doc.amount_ttc) > 0
-  && Boolean(doc.due_date)
-  && new Date(`${doc.due_date}T23:59:59`) < new Date();
-
-/** Statut effectif : marque "en retard" les factures envoyées dont l'échéance est dépassée. */
-const effectiveStatus = (doc: BillingDocument): string => {
-  if ((doc.document_type || 'invoice') === 'quote') return doc.quote_status && doc.quote_status !== 'none' ? doc.quote_status : doc.status;
-  if (isOverdue(doc)) return 'overdue';
-  if (doc.status === 'sent' && (doc.paid_amount || 0) > 0 && (doc.balance_due || 0) > 0) return 'partially_paid';
-  return doc.status;
-};
 
 const periodStart = (period: PeriodFilter): Date | null => {
   const now = new Date();
@@ -121,6 +90,13 @@ const BillingPage: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
+      // Reconcile time-based overdue statuses before reading (no scheduler runs
+      // this otherwise). Best-effort: a failure here must not block the list.
+      try {
+        await (supabase as any).rpc('mark_overdue_invoices');
+      } catch (overdueErr) {
+        console.warn('mark_overdue_invoices failed', overdueErr);
+      }
       // Le client typé ne connaît pas encore les colonnes des migrations récentes.
       const db = supabase as unknown as { from: (table: string) => ReturnType<typeof supabase.from> };
       const { data, error: fetchError } = await db
@@ -184,7 +160,7 @@ const BillingPage: React.FC = () => {
       - credits.reduce((sum, d) => sum + (d.amount_ttc || 0), 0);
     const collected = active.reduce((sum, d) => sum + (d.paid_amount || 0), 0);
     const outstanding = active.reduce((sum, d) => sum + (d.balance_due ?? Math.max((d.amount_ttc || 0) - (d.paid_amount || 0), 0)), 0);
-    const overdueDocs = active.filter(isOverdue);
+    const overdueDocs = active.filter((d) => isOverdue(d));
     const overdueAmount = overdueDocs.reduce((sum, d) => sum + (d.balance_due || 0), 0);
     return { invoiced, collected, outstanding, overdueAmount, overdueCount: overdueDocs.length };
   }, [invoices, creditNotes, periodFilter]);

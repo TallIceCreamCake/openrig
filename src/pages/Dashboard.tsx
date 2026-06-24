@@ -17,6 +17,9 @@ import PlanningGanttWidget from '../components/dashboard/widgets/PlanningGanttWi
 import StockPlanningWidget from '../components/dashboard/widgets/StockPlanningWidget';
 import UserTasksWidget from '../components/dashboard/widgets/UserTasksWidget';
 import ClockDateWidget from '../components/dashboard/widgets/ClockDateWidget';
+import QuickActionsWidget from '../components/dashboard/widgets/QuickActionsWidget';
+import FinanceWidget from '../components/dashboard/widgets/FinanceWidget';
+import { DEFAULT_QUICK_ACTION_IDS, QUICK_ACTIONS_BY_ID } from '../constants/quickActions';
 import {
   DashboardWidget,
   WidgetLayout,
@@ -25,6 +28,8 @@ import {
   CalendarWidgetOptions,
   ClockWidgetOptions,
   UpcomingRentalsWidgetOptions,
+  QuickActionsWidgetOptions,
+  FinanceWidgetOptions,
 } from '../types/dashboard';
 import { useUIPreferences } from '../hooks/useUIPreferences';
 import { useDashboardData } from '../hooks/useDashboardData';
@@ -64,6 +69,55 @@ const UPCOMING_RENTALS_WIDGET_DEFAULT_OPTIONS: Required<UpcomingRentalsWidgetOpt
   showStatus: true,
   limit: 5,
   sortOrder: 'start_asc',
+};
+
+const QUICK_ACTIONS_WIDGET_DEFAULT_OPTIONS: Required<QuickActionsWidgetOptions> = {
+  actionIds: DEFAULT_QUICK_ACTION_IDS,
+  columns: 'auto',
+};
+
+const resolveQuickActionsWidgetOptions = (
+  options: DashboardWidgetOptions | undefined,
+): Required<QuickActionsWidgetOptions> => {
+  const rawIds = options?.quickActions?.actionIds;
+  const actionIds = Array.isArray(rawIds)
+    ? rawIds.filter((id) => Boolean(QUICK_ACTIONS_BY_ID[id]))
+    : QUICK_ACTIONS_WIDGET_DEFAULT_OPTIONS.actionIds;
+  const rawColumns = options?.quickActions?.columns;
+  const columns = rawColumns === 2 || rawColumns === 3 || rawColumns === 4 || rawColumns === 5
+    ? rawColumns
+    : 'auto';
+  return { actionIds, columns };
+};
+
+const FINANCE_WIDGET_DEFAULT_OPTIONS: Required<FinanceWidgetOptions> = {
+  period: '12m',
+  chartType: 'area',
+  showInvoiced: true,
+  showCollected: true,
+  showKpiInvoiced: true,
+  showKpiCollected: true,
+  showKpiOutstanding: true,
+  showKpiOverdue: true,
+  showOverdueList: true,
+};
+
+const resolveFinanceWidgetOptions = (
+  options: DashboardWidgetOptions | undefined,
+): Required<FinanceWidgetOptions> => {
+  const f = options?.finance || {};
+  const asBool = (v: unknown, fallback: boolean) => (typeof v === 'boolean' ? v : fallback);
+  return {
+    period: f.period === '6m' || f.period === 'ytd' || f.period === '12m' ? f.period : '12m',
+    chartType: f.chartType === 'line' || f.chartType === 'bar' || f.chartType === 'area' ? f.chartType : 'area',
+    showInvoiced: asBool(f.showInvoiced, true),
+    showCollected: asBool(f.showCollected, true),
+    showKpiInvoiced: asBool(f.showKpiInvoiced, true),
+    showKpiCollected: asBool(f.showKpiCollected, true),
+    showKpiOutstanding: asBool(f.showKpiOutstanding, true),
+    showKpiOverdue: asBool(f.showKpiOverdue, true),
+    showOverdueList: asBool(f.showOverdueList, true),
+  };
 };
 
 const getCalendarLayoutSizing = (days: 1 | 2) => ({
@@ -139,6 +193,8 @@ const buildAvailableWidgets = (
   const calendarOptions = resolveCalendarWidgetOptions(widgetOptions);
   const clockOptions = resolveClockWidgetOptions(widgetOptions);
   const upcomingRentalsOptions = resolveUpcomingRentalsWidgetOptions(widgetOptions);
+  const quickActionsOptions = resolveQuickActionsWidgetOptions(widgetOptions);
+  const financeOptions = resolveFinanceWidgetOptions(widgetOptions);
   const calendarDays: 1 | 2 = calendarOptions.days;
   const calendarSizing = getCalendarLayoutSizing(calendarDays);
   const calendarLayout = {
@@ -233,6 +289,20 @@ const buildAvailableWidgets = (
       props: {},
       defaultLayout: { w: 4, h: 5, minW: 3, minH: 4 },
     },
+    {
+      id: 'quick-actions',
+      title: 'Raccourcis rapides',
+      component: QuickActionsWidget,
+      props: { options: quickActionsOptions },
+      defaultLayout: { w: 4, h: 4, minW: 2, minH: 2 },
+    },
+    {
+      id: 'finance',
+      title: 'Finances',
+      component: FinanceWidget,
+      props: { options: financeOptions },
+      defaultLayout: { w: 6, h: 7, minW: 4, minH: 5 },
+    },
   ];
   return widgets;
 };
@@ -244,6 +314,7 @@ const defaultDashboardState: DashboardState = {
     calendar: { ...CALENDAR_WIDGET_DEFAULT_OPTIONS },
     clock: { ...CLOCK_WIDGET_DEFAULT_OPTIONS },
     upcomingRentals: { ...UPCOMING_RENTALS_WIDGET_DEFAULT_OPTIONS },
+    quickActions: { ...QUICK_ACTIONS_WIDGET_DEFAULT_OPTIONS },
   },
   layouts: {
     lg: [
@@ -414,6 +485,12 @@ const Dashboard = () => {
     if (widgetId === 'upcoming-rentals') {
       nextWidgetOptions.upcomingRentals = { ...UPCOMING_RENTALS_WIDGET_DEFAULT_OPTIONS };
     }
+    if (widgetId === 'quick-actions') {
+      nextWidgetOptions.quickActions = { ...QUICK_ACTIONS_WIDGET_DEFAULT_OPTIONS };
+    }
+    if (widgetId === 'finance') {
+      nextWidgetOptions.finance = { ...FINANCE_WIDGET_DEFAULT_OPTIONS };
+    }
 
     setDashboardState({
       ...dashboardState,
@@ -536,6 +613,55 @@ const Dashboard = () => {
         widgetOptions: {
           ...dashboardState.widgetOptions,
           upcomingRentals: nextUpcomingOptions,
+        },
+      });
+      return;
+    }
+
+    if (widgetId === 'quick-actions') {
+      const currentQuickActionsOptions = resolveQuickActionsWidgetOptions(dashboardState.widgetOptions);
+      const nextActionIds = Array.isArray(options.actionIds)
+        ? (options.actionIds as unknown[]).filter(
+            (id): id is string => typeof id === 'string' && Boolean(QUICK_ACTIONS_BY_ID[id]),
+          )
+        : currentQuickActionsOptions.actionIds;
+      const nextColumns = options.columns === 2 || options.columns === 3 || options.columns === 4 || options.columns === 5
+        ? options.columns
+        : options.columns === 'auto'
+          ? 'auto'
+          : currentQuickActionsOptions.columns;
+      const nextQuickActionsOptions: Required<QuickActionsWidgetOptions> = {
+        actionIds: nextActionIds,
+        columns: nextColumns,
+      };
+
+      const hasChanged = JSON.stringify(currentQuickActionsOptions) !== JSON.stringify(nextQuickActionsOptions);
+      if (!hasChanged) return;
+
+      setDashboardState({
+        ...dashboardState,
+        widgetOptions: {
+          ...dashboardState.widgetOptions,
+          quickActions: nextQuickActionsOptions,
+        },
+      });
+      return;
+    }
+
+    if (widgetId === 'finance') {
+      const currentFinanceOptions = resolveFinanceWidgetOptions(dashboardState.widgetOptions);
+      const nextFinanceOptions = resolveFinanceWidgetOptions({
+        finance: { ...currentFinanceOptions, ...(options as Partial<FinanceWidgetOptions>) },
+      });
+
+      const hasChanged = JSON.stringify(currentFinanceOptions) !== JSON.stringify(nextFinanceOptions);
+      if (!hasChanged) return;
+
+      setDashboardState({
+        ...dashboardState,
+        widgetOptions: {
+          ...dashboardState.widgetOptions,
+          finance: nextFinanceOptions,
         },
       });
     }

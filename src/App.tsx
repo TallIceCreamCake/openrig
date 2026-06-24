@@ -66,6 +66,12 @@ import MobileClientDetail from './pages/mobile/MobileClientDetail';
 import MobileEquipment from './pages/mobile/MobileEquipment';
 import MobileEquipmentDetail from './pages/mobile/MobileEquipmentDetail';
 import MobileAccessoryDetail from './pages/mobile/MobileAccessoryDetail';
+import MobileRentals from './pages/mobile/MobileRentals';
+import MobileRentalCreate from './pages/mobile/MobileRentalCreate';
+import MobileRentalDetail from './pages/mobile/MobileRentalDetail';
+import MobileScanner from './pages/mobile/MobileScanner';
+import MobileTasks from './pages/mobile/MobileTasks';
+import MobileIncidentCreate from './pages/mobile/MobileIncidentCreate';
 import { useDocumentTitle } from './hooks/useDocumentTitle';
 import { DatabaseStatusProvider, DatabaseOfflineOverlay } from './context/DatabaseStatusContext';
 import { TranslationProvider, useTranslation } from './context/TranslationContext';
@@ -243,6 +249,12 @@ function App() {
                         <Route path="/m/materiel/:id" element={<MobileEquipmentDetail />} />
                         <Route path="/m/accessoires/:id" element={<MobileAccessoryDetail />} />
                         <Route path="/m/account" element={<MobileAccount />} />
+                        <Route path="/m/projets" element={<MobileRentals />} />
+                        <Route path="/m/projets/nouveau" element={<MobileRentalCreate />} />
+                        <Route path="/m/projets/:id" element={<MobileRentalDetail />} />
+                        <Route path="/m/scan" element={<MobileScanner />} />
+                        <Route path="/m/taches" element={<MobileTasks />} />
+                        <Route path="/m/sinistre" element={<MobileIncidentCreate />} />
                       </Routes>
                     </Layout>
                   </RequireAuth>

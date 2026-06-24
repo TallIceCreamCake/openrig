@@ -11,7 +11,7 @@ L.Icon.Default.mergeOptions({
   shadowUrl: new URL('leaflet/dist/images/marker-shadow.png', import.meta.url).href,
 });
 import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom';
-import { FileText, Package, Info, Euro, Users, Calendar, Trash2, FilePlus2, ShieldCheck, ShieldX, Wrench, Truck, Undo2, CreditCard, ArrowLeft, Edit, Save, Check, History, Flag, UserCheck, FileSignature, Folder, ChevronRight, ChevronLeft, ChevronDown, FolderPlus, Upload, Home, Briefcase, Camera, Image, Music, Video, Star, Share2, Copy, ExternalLink, QrCode, MessageSquarePlus, AlertTriangle, Navigation, Clock, MapPin, Globe, BadgeCheck, HardHat } from 'lucide-react';
+import { FileText, Package, Info, Euro, Users, Calendar, Trash2, FilePlus2, ShieldCheck, ShieldX, Wrench, Truck, Undo2, CreditCard, ArrowLeft, Edit, Save, Check, History, Flag, UserCheck, FileSignature, Folder, ChevronRight, ChevronLeft, ChevronDown, FolderPlus, Upload, Home, Briefcase, Camera, Image, Music, Video, Star, Share2, Copy, ExternalLink, QrCode, MessageSquarePlus, AlertTriangle, Navigation, Clock, MapPin, Globe, BadgeCheck, HardHat, ArrowLeftRight } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import DocumentGeneratorModal from '../components/rentals/DocumentGeneratorModal';
 import { Equipment } from '../types/equipment';
@@ -24,6 +24,7 @@ import RentalHeader from '../components/rentals/RentalHeader';
 import RentalMilestonesPanel from '../components/rentals/RentalMilestonesPanel';
 import RentalTasksPanel from '../components/rentals/RentalTasksPanel';
 import RentalCrewPanel from '../components/rentals/RentalCrewPanel';
+import RentalSubrentalsPanel from '../components/rentals/RentalSubrentalsPanel';
 import RentalFileExplorerModal from '../components/rentals/RentalFileExplorerModal';
 import { useRental } from '../hooks/useRental';
 import { useVehicles } from '../hooks/useVehicles';
@@ -747,7 +748,7 @@ const RentalDetail = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useUIPreferences('rental_detail_tab', (() => {
     const t = searchParams.get('tab');
-    const valid = ['general', 'equipment', 'delivery', 'personnel', 'insurance', 'other'];
+    const valid = ['general', 'equipment', 'delivery', 'personnel', 'insurance', 'other', 'subrentals'];
     return valid.includes(t as string) ? (t as string) : 'general';
   })());
   React.useEffect(() => { setSearchParams({ tab: activeTab as string }, { replace: true }); }, [activeTab]);
@@ -2064,6 +2065,7 @@ const RentalDetail = () => {
     }
     base.push({ id: 'insurance', name: 'Assurance', icon: ShieldCheck });
     base.push({ id: 'other', name: 'Autres services', icon: Briefcase });
+    base.push({ id: 'subrentals', name: 'Sous-locations', icon: ArrowLeftRight });
     if (rental?.type !== 'sale') {
       base.push({ id: 'milestones', name: 'Dates clés', icon: Flag });
     }
@@ -7010,6 +7012,14 @@ const RentalDetail = () => {
                 )}
               </div>
             </div>
+          )}
+
+          {activeTab === 'subrentals' && (
+            <RentalSubrentalsPanel
+              rentalId={rental.id}
+              rentalDays={rentalDays}
+              isEditing={isEditing}
+            />
           )}
 
           {activeTab === 'milestones' && (
