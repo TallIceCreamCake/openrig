@@ -12,6 +12,7 @@ import {
   Projector,
   ReceiptText,
   Settings,
+  Truck,
   Users,
   Warehouse,
 } from 'lucide-react';
@@ -30,6 +31,7 @@ export type NavItemKey =
   | 'accounting'
   | 'vehicles'
   | 'maintenance'
+  | 'truck_loading'
   | 'settings'
   | 'company';
 
@@ -83,6 +85,14 @@ export const NAV_ITEM_DEFINITIONS: Record<NavItemKey, NavigationItemDefinition> 
   accounting: { key: 'accounting', name: 'Comptabilité', href: '/accounting', icon: ReceiptText, perm: 'ac_view_menu' },
   vehicles: { key: 'vehicles', name: 'Véhicules', href: '/vehicles', icon: Forklift },
   maintenance: { key: 'maintenance', name: 'Maintenance', href: '/maintenance', icon: Construction },
+  truck_loading: {
+    key: 'truck_loading',
+    name: 'Chargement camion',
+    href: '/truck-loading',
+    icon: Truck,
+    featureKey: 'truck_loading',
+    featureFallback: false,
+  },
   settings: { key: 'settings', name: 'Paramètres', href: '/settings', icon: Settings },
   company: { key: 'company', name: 'Gestion entreprise', href: '/company', icon: Building2 },
 };
@@ -100,6 +110,7 @@ export const DEFAULT_MENU_LAYOUT: MenuLayoutNode[] = [
   { id: 'accounting', type: 'item', key: 'accounting' },
   { id: 'vehicles', type: 'item', key: 'vehicles' },
   { id: 'maintenance', type: 'item', key: 'maintenance' },
+  { id: 'truck_loading', type: 'item', key: 'truck_loading' },
 ];
 
 export const MENU_ICON_PLACEHOLDER = Menu;

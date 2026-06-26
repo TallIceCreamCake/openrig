@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Building2, CheckCircle2, Upload, FileText, Sparkles, Info, RefreshCcw, Layers3, MessageCircle, Mail, Send, Loader2, Calculator, CalendarDays, Copy, Link2, Download, Bug, Users, Zap, Key, Trash2, Plus, Eye, EyeOff, Shield, Clock } from 'lucide-react';
+import { Building2, CheckCircle2, Upload, FileText, Sparkles, Info, RefreshCcw, Layers3, MessageCircle, Mail, Send, Loader2, Calculator, CalendarDays, Copy, Link2, Download, Bug, Users, Zap, Key, Trash2, Plus, Eye, EyeOff, Shield, Clock, Truck } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -643,6 +643,7 @@ const CompanySettingsPage: React.FC = () => {
 
   const [featureBillingManual, setFeatureBillingManual] = useState(true);
   const [featurePersonnelChat, setFeaturePersonnelChat] = useState(false);
+  const [featureTruckLoading, setFeatureTruckLoading] = useState(false);
   const [featureClientPortal, setFeatureClientPortal] = useState(false);
   const [featurePublicApi, setFeaturePublicApi] = useState(false);
   const [cpWelcomeMsg, setCpWelcomeMsg] = useState('');
@@ -910,6 +911,7 @@ const CompanySettingsPage: React.FC = () => {
       ...base,
       billing_manual: featureBillingManual,
       personnel_chat: featurePersonnelChat,
+      truck_loading: featureTruckLoading,
       client_portal: featureClientPortal,
       public_api: featurePublicApi,
       client_portal_welcome_msg: cpWelcomeMsg,
@@ -958,6 +960,12 @@ const CompanySettingsPage: React.FC = () => {
       setFeaturePersonnelChat(Boolean(featuresMap.personnel_chat));
     } else {
       setFeaturePersonnelChat(isFeatureEnabled(settings, 'personnel_chat', false));
+    }
+
+    if ('truck_loading' in featuresMap) {
+      setFeatureTruckLoading(Boolean(featuresMap.truck_loading));
+    } else {
+      setFeatureTruckLoading(isFeatureEnabled(settings, 'truck_loading', false));
     }
 
     setFeatureClientPortal(Boolean(featuresMap.client_portal));
@@ -2121,6 +2129,25 @@ const CompanySettingsPage: React.FC = () => {
                   <div className="mt-auto flex items-center justify-between">
                     <span className={`text-xs font-medium ${featurePersonnelChat ? 'text-violet-600' : 'text-gray-400'}`}>{featurePersonnelChat ? 'Activé' : 'Désactivé'}</span>
                     <Switch checked={featurePersonnelChat} onChange={setFeaturePersonnelChat} />
+                  </div>
+                </div>
+
+                {/* Truck loading (TruckPacker) */}
+                <div className={`flex flex-col gap-4 rounded-xl border p-5 shadow-sm transition-all duration-150 ${featureTruckLoading ? 'border-orange-200 bg-orange-50/30' : 'border-gray-200 bg-white hover:border-gray-300'}`}>
+                  <div className="flex items-start gap-3">
+                    <div className="flex-shrink-0 h-10 w-10 rounded-xl flex items-center justify-center bg-orange-500 shadow-sm shadow-orange-200">
+                      <Truck className="h-5 w-5 text-white" />
+                    </div>
+                    <div>
+                      <div className="text-sm font-semibold text-gray-900">Chargement camion</div>
+                      <p className="mt-1 text-xs text-gray-500 leading-relaxed">
+                        Planifiez et optimisez le calage du matériel dans vos véhicules, projet par projet.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-auto flex items-center justify-between">
+                    <span className={`text-xs font-medium ${featureTruckLoading ? 'text-orange-600' : 'text-gray-400'}`}>{featureTruckLoading ? 'Activé' : 'Désactivé'}</span>
+                    <Switch checked={featureTruckLoading} onChange={setFeatureTruckLoading} />
                   </div>
                 </div>
 

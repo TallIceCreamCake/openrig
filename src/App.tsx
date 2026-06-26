@@ -24,6 +24,7 @@ import SettingsPage from './pages/Settings';
 import CompanySettingsPage from './pages/CompanySettings';
 import TemplateStudio from './pages/TemplateStudio';
 import PersonnelChatPage from './pages/PersonnelChatPage';
+import TruckLoadingPage from './pages/TruckLoading';
 import LoginPage from './pages/Login';
 import FirstLoginPage from './pages/FirstLogin';
 import SystemSetupPage from './pages/SystemSetup';
@@ -217,6 +218,7 @@ function App() {
                         <Route path="/personnel" element={<Personnel />} />
                         <Route path="/personnel/:id" element={<PersonnelDetail />} />
                         <Route path="/chat" element={<PersonnelChatPage />} />
+                        <Route path="/truck-loading" element={<TruckLoadingPage />} />
                         <Route path="/accounting/*" element={<Accounting />}>
                           <Route path="documents" element={<BillingPage />} />
                           <Route path="documents/new" element={<BillingCreatePage />} />

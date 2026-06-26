@@ -11,7 +11,7 @@ L.Icon.Default.mergeOptions({
   shadowUrl: new URL('leaflet/dist/images/marker-shadow.png', import.meta.url).href,
 });
 import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom';
-import { FileText, Package, Info, Euro, Users, Calendar, Trash2, FilePlus2, ShieldCheck, ShieldX, Wrench, Truck, Undo2, CreditCard, ArrowLeft, Edit, Save, Check, History, Flag, UserCheck, FileSignature, Folder, ChevronRight, ChevronLeft, ChevronDown, FolderPlus, Upload, Home, Briefcase, Camera, Image, Music, Video, Star, Share2, Copy, ExternalLink, QrCode, MessageSquarePlus, AlertTriangle, Navigation, Clock, MapPin, Globe, BadgeCheck, HardHat, ArrowLeftRight } from 'lucide-react';
+import { FileText, Package, Info, Euro, Users, Calendar, Trash2, FilePlus2, ShieldCheck, ShieldX, Wrench, Truck, Undo2, CreditCard, ArrowLeft, Edit, Save, Check, History, Flag, UserCheck, FileSignature, Folder, ChevronRight, ChevronLeft, ChevronDown, FolderPlus, Upload, Home, Briefcase, Camera, Image, Music, Video, Star, Share2, Copy, ExternalLink, QrCode, MessageSquarePlus, AlertTriangle, Navigation, Clock, MapPin, Globe, BadgeCheck, HardHat, ArrowLeftRight, Box } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import DocumentGeneratorModal from '../components/rentals/DocumentGeneratorModal';
 import { Equipment } from '../types/equipment';
@@ -56,6 +56,7 @@ import { ensureRentalDraftInvoice } from '../utils/rentalInvoice';
 import { resolveTemplateStudioSnapshotForDoc } from '../utils/templateStudioDocument';
 import { getRentalStatusLabel, getRentalStatusTone } from '../utils/rentalStatus';
 import InvoiceFinancialPanel from '../components/billing/InvoiceFinancialPanel';
+import RentalLoadingTab from '../components/rentals/RentalLoadingTab';
 
 // ── Carte satellite livraison ────────────────────────────────────────────────
 const DeliveryMapFlyTo: React.FC<{ lat: number; lon: number }> = ({ lat, lon }) => {
@@ -904,6 +905,43 @@ const RentalDetail = () => {
   const colorNameCache = React.useRef(new Map<string, string>());
   const [tabDirection, setTabDirection] = React.useState<'forward' | 'backward'>('forward');
   const prevTabRef = React.useRef(activeTab);
+
+  // ── Security deposit (caution) ──────────────────────────────────────────────
+  const [depositAmountInput, setDepositAmountInput] = React.useState('');
+  const [depositMethod, setDepositMethod] = React.useState('');
+  const [depositReference, setDepositReference] = React.useState('');
+  const [depositNotes, setDepositNotes] = React.useState('');
+  const [depositRetainInput, setDepositRetainInput] = React.useState('');
+  const [showDepositRetain, setShowDepositRetain] = React.useState(false);
+  const [depositSaving, setDepositSaving] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!rental) return;
+    setDepositAmountInput(rental.deposit_amount ? String(rental.deposit_amount) : '');
+    setDepositMethod(rental.deposit_method || '');
+    setDepositReference(rental.deposit_reference || '');
+    setDepositNotes(rental.deposit_notes || '');
+    setShowDepositRetain(false);
+    setDepositRetainInput('');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rental?.id]);
+
+  const persistDeposit = React.useCallback(async (updates: Partial<Rental>) => {
+    if (!rental?.id) return;
+    setDepositSaving(true);
+    try {
+      // Cast: generated Supabase types are stale (don't include the deposit_* columns yet).
+      const { error } = await (supabase as any).from('rentals').update(updates).eq('id', rental.id);
+      if (error) throw error;
+      setRental((prev) => (prev ? ({ ...prev, ...updates } as Rental) : prev));
+      toast.success('Caution mise à jour');
+    } catch (err) {
+      console.error('update deposit', err);
+      toast.error('Erreur lors de la mise à jour de la caution');
+    } finally {
+      setDepositSaving(false);
+    }
+  }, [rental?.id, setRental]);
 
   const workflowStatus = React.useMemo(() => {
     if (!rental) return 'pending';
@@ -2060,6 +2098,9 @@ const RentalDetail = () => {
       { id: 'delivery', name: 'Livraison', icon: Calendar },
       { id: 'crew', name: 'Équipe', icon: HardHat },
     ];
+    if (settings?.features?.truck_loading) {
+      base.push({ id: 'loading3d', name: 'Chargement 3D', icon: Box });
+    }
     if (rental?.type === 'service') {
       base.push({ id: 'personnel', name: 'Personnel', icon: UserCheck });
     }
@@ -7034,6 +7075,8 @@ const RentalDetail = () => {
             </div>
           )}
 
+          {activeTab === 'loading3d' && rental && <RentalLoadingTab rental={rental} editable={isEditing} />}
+
           {activeTab === 'financial' && (
             <div className="p-6 space-y-6">
               {/* Coefficient card (moved here from equipment tab) */}
@@ -7089,6 +7132,208 @@ const RentalDetail = () => {
                   </div>
                 </div>
               </div>
+
+              {/* Caution / dépôt de garantie */}
+              {(() => {
+                const dStatus = (rental?.deposit_status || 'none') as string;
+                const dAmount = Number(rental?.deposit_amount || 0);
+                const dRetained = Number(rental?.deposit_retained_amount || 0);
+                const today = new Date().toISOString().slice(0, 10);
+                const parsedAmount = Number((depositAmountInput || '').replace(',', '.')) || 0;
+                const parsedRetain = Number((depositRetainInput || '').replace(',', '.')) || 0;
+                const STATUS_META: Record<string, { label: string; tone: BadgeTone }> = {
+                  none: { label: 'Aucune', tone: 'gray' },
+                  pending: { label: 'À encaisser', tone: 'amber' },
+                  held: { label: 'Encaissée / bloquée', tone: 'blue' },
+                  returned: { label: 'Restituée', tone: 'emerald' },
+                  partially_retained: { label: 'Restituée (retenue)', tone: 'amber' },
+                  retained: { label: 'Conservée', tone: 'rose' },
+                };
+                const METHOD_LABELS: Record<string, string> = {
+                  cash: 'Espèces', check: 'Chèque', transfer: 'Virement',
+                  card_preauth: 'Empreinte CB (pré-autorisation)', bank_hold: 'Blocage bancaire', other: 'Autre',
+                };
+                const meta = STATUS_META[dStatus] || STATUS_META.none;
+                const isClosed = dStatus === 'returned' || dStatus === 'partially_retained' || dStatus === 'retained';
+                return (
+                  <div className="bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 space-y-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <ShieldCheck className="h-4 w-4 text-gray-500" />
+                        <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">Caution / dépôt de garantie</span>
+                        <StatusBadge tone={meta.tone} size="sm">{meta.label}</StatusBadge>
+                      </div>
+                      <span className="text-xs text-gray-400">Remboursable — non comptabilisée dans le total du projet</span>
+                    </div>
+
+                    {/* Details */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <label className="block">
+                        <span className="text-xs font-medium text-gray-500">Montant (€)</span>
+                        <input
+                          type="number" min="0" step="0.01" inputMode="decimal"
+                          value={depositAmountInput}
+                          onChange={(e) => setDepositAmountInput(e.target.value)}
+                          disabled={isClosed || depositSaving}
+                          placeholder="0,00"
+                          className="mt-1 w-full rounded-md border border-gray-300 dark:border-gray-600 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:outline-none disabled:bg-gray-100 dark:bg-gray-800 dark:text-gray-200"
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="text-xs font-medium text-gray-500">Mode</span>
+                        <select
+                          value={depositMethod}
+                          onChange={(e) => setDepositMethod(e.target.value)}
+                          disabled={isClosed || depositSaving}
+                          className="mt-1 w-full rounded-md border border-gray-300 dark:border-gray-600 px-2.5 py-1.5 text-sm bg-white dark:bg-gray-800 dark:text-gray-200 focus:border-blue-500 focus:outline-none disabled:bg-gray-100"
+                        >
+                          <option value="">—</option>
+                          {Object.entries(METHOD_LABELS).map(([value, label]) => (
+                            <option key={value} value={value}>{label}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="block">
+                        <span className="text-xs font-medium text-gray-500">Référence</span>
+                        <input
+                          type="text"
+                          value={depositReference}
+                          onChange={(e) => setDepositReference(e.target.value)}
+                          disabled={isClosed || depositSaving}
+                          placeholder="N° chèque, réf. empreinte…"
+                          className="mt-1 w-full rounded-md border border-gray-300 dark:border-gray-600 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:outline-none disabled:bg-gray-100 dark:bg-gray-800 dark:text-gray-200"
+                        />
+                      </label>
+                    </div>
+                    <label className="block">
+                      <span className="text-xs font-medium text-gray-500">Notes</span>
+                      <textarea
+                        value={depositNotes}
+                        onChange={(e) => setDepositNotes(e.target.value)}
+                        disabled={depositSaving}
+                        rows={2}
+                        placeholder="État du matériel, conditions de restitution…"
+                        className="mt-1 w-full rounded-md border border-gray-300 dark:border-gray-600 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:outline-none disabled:bg-gray-100 dark:bg-gray-800 dark:text-gray-200"
+                      />
+                    </label>
+
+                    {/* Lifecycle summary when closed */}
+                    {isClosed && (
+                      <div className="rounded-md bg-gray-50 dark:bg-gray-800 px-3 py-2 text-xs text-gray-600 dark:text-gray-300 space-y-0.5">
+                        {rental?.deposit_held_at && <div>Encaissée le {new Date(rental.deposit_held_at).toLocaleDateString('fr-FR')}</div>}
+                        {rental?.deposit_returned_at && <div>Restituée le {new Date(rental.deposit_returned_at).toLocaleDateString('fr-FR')}</div>}
+                        <div>Montant retenu : <span className="font-semibold">{formatMoney(dRetained)}</span> · Restitué au client : <span className="font-semibold">{formatMoney(Math.max(dAmount - dRetained, 0))}</span></div>
+                      </div>
+                    )}
+
+                    {/* Actions */}
+                    <div className="flex flex-wrap items-center gap-2 pt-1">
+                      {!isClosed && (
+                        <button
+                          type="button"
+                          onClick={() => persistDeposit({
+                            deposit_amount: parsedAmount,
+                            deposit_method: (depositMethod || null) as any,
+                            deposit_reference: depositReference.trim() || null,
+                            deposit_notes: depositNotes.trim() || null,
+                            deposit_status: dStatus === 'none' && parsedAmount > 0 ? 'pending' : (dStatus as any),
+                          })}
+                          disabled={depositSaving}
+                          className="px-3 py-1.5 rounded-md border border-gray-200 dark:border-gray-600 text-xs text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
+                        >
+                          Enregistrer les détails
+                        </button>
+                      )}
+
+                      {(dStatus === 'none' || dStatus === 'pending') && (
+                        <button
+                          type="button"
+                          onClick={() => persistDeposit({
+                            deposit_status: 'held',
+                            deposit_held_at: today,
+                            deposit_amount: parsedAmount,
+                            deposit_method: (depositMethod || null) as any,
+                            deposit_reference: depositReference.trim() || null,
+                          })}
+                          disabled={depositSaving || parsedAmount <= 0}
+                          className="px-3 py-1.5 rounded-md bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 disabled:opacity-50"
+                          title={parsedAmount <= 0 ? 'Renseignez un montant' : undefined}
+                        >
+                          Marquer la caution encaissée
+                        </button>
+                      )}
+
+                      {dStatus === 'held' && !showDepositRetain && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => persistDeposit({ deposit_status: 'returned', deposit_returned_at: today, deposit_retained_amount: 0 })}
+                            disabled={depositSaving}
+                            className="px-3 py-1.5 rounded-md bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 disabled:opacity-50"
+                          >
+                            Restituer intégralement
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => { setShowDepositRetain(true); setDepositRetainInput(''); }}
+                            disabled={depositSaving}
+                            className="px-3 py-1.5 rounded-md border border-amber-300 text-amber-700 text-xs font-medium hover:bg-amber-50 disabled:opacity-50"
+                          >
+                            Restituer avec retenue
+                          </button>
+                        </>
+                      )}
+
+                      {dStatus === 'held' && showDepositRetain && (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="flex items-center gap-1">
+                            <span className="text-xs text-gray-500">Montant retenu (€)</span>
+                            <input
+                              type="number" min="0" max={dAmount} step="0.01" inputMode="decimal"
+                              value={depositRetainInput}
+                              onChange={(e) => setDepositRetainInput(e.target.value)}
+                              autoFocus
+                              className="w-28 rounded-md border border-gray-300 dark:border-gray-600 px-2 py-1 text-sm text-right focus:border-amber-500 focus:outline-none dark:bg-gray-800 dark:text-gray-200"
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const r = Math.min(Math.max(parsedRetain, 0), dAmount);
+                              const st = r >= dAmount && dAmount > 0 ? 'retained' : (r > 0 ? 'partially_retained' : 'returned');
+                              persistDeposit({ deposit_status: st as any, deposit_returned_at: today, deposit_retained_amount: r });
+                              setShowDepositRetain(false);
+                            }}
+                            disabled={depositSaving}
+                            className="px-3 py-1.5 rounded-md bg-amber-600 text-white text-xs font-medium hover:bg-amber-700 disabled:opacity-50"
+                          >
+                            Confirmer la restitution
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setShowDepositRetain(false)}
+                            disabled={depositSaving}
+                            className="px-3 py-1.5 rounded-md border border-gray-200 dark:border-gray-600 text-xs text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
+                          >
+                            Annuler
+                          </button>
+                        </div>
+                      )}
+
+                      {isClosed && (
+                        <button
+                          type="button"
+                          onClick={() => persistDeposit({ deposit_status: 'held', deposit_returned_at: null, deposit_retained_amount: 0 })}
+                          disabled={depositSaving}
+                          className="px-3 py-1.5 rounded-md border border-gray-200 dark:border-gray-600 text-xs text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
+                        >
+                          Annuler la restitution
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
 
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
                 <div className="bg-white rounded-lg shadow-sm p-6 space-y-6">

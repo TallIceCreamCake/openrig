@@ -151,7 +151,19 @@ export interface Rental {
   portal_validated_at?: string | null;
   portal_validated_by_id?: string | null;
   portal_validation_notes?: string | null;
+  // Security deposit (caution) — refundable guarantee, distinct from advance payments.
+  deposit_amount?: number | null;
+  deposit_method?: DepositMethod | null;
+  deposit_status?: DepositStatus | null;
+  deposit_reference?: string | null;
+  deposit_held_at?: string | null;
+  deposit_returned_at?: string | null;
+  deposit_retained_amount?: number | null;
+  deposit_notes?: string | null;
 }
+
+export type DepositMethod = 'cash' | 'check' | 'transfer' | 'card_preauth' | 'bank_hold' | 'other';
+export type DepositStatus = 'none' | 'pending' | 'held' | 'partially_retained' | 'retained' | 'returned';
 
 export interface RentalPersonnelServiceItem {
   service_record_id: string;

@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { Search, Bell, Settings, Building2, LogOut, ChevronDown, X, HelpCircle, Sun, Moon } from 'lucide-react';
 import { applyTheme, resolveTheme } from '../utils/theme';
@@ -78,6 +79,9 @@ const TopBar = () => {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearchOverlay, setShowSearchOverlay] = useState(false);
+  // Spotlight = the centered, keyboard-triggered (⌘K / Ctrl+K) search overlay.
+  // The inline navbar bar (click/focus) keeps its own showSearchOverlay state.
+  const [spotlightOpen, setSpotlightOpen] = useState(false);
   const [results, setResults] = useState<GlobalSearchSection[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
@@ -86,6 +90,7 @@ const TopBar = () => {
   const [tabSearchClosing, setTabSearchClosing] = useState(false);
   const searchOverlayRef = useRef<HTMLDivElement>(null);
   const searchOverlayInputRef = useRef<HTMLInputElement>(null);
+  const spotlightInputRef = useRef<HTMLInputElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
   const tabSearchClosingRef = useRef(false);
   const {
@@ -126,6 +131,12 @@ const TopBar = () => {
     }, 140);
   };
 
+  const closeSpotlight = () => {
+    setSpotlightOpen(false);
+    setSearchQuery('');
+    setResults([]);
+  };
+
   // Ref-based handler so click-outside always reads fresh state (no stale closure)
   const clickOutsideHandlerRef = useRef((_e: MouseEvent) => {});
   clickOutsideHandlerRef.current = (event: MouseEvent) => {
@@ -160,18 +171,31 @@ const TopBar = () => {
     setSearchQuery(e.target.value);
   };
 
-  // Cmd+K / Ctrl+K opens the global search
+  // Cmd+K / Ctrl+K opens the global search as a centered Spotlight overlay.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
         e.preventDefault();
-        setShowSearchOverlay(true);
-        setTimeout(() => searchOverlayInputRef.current?.focus(), 60);
+        setSpotlightOpen(true);
+        setTimeout(() => spotlightInputRef.current?.focus(), 60);
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
+
+  // Escape closes the Spotlight overlay.
+  useEffect(() => {
+    if (!spotlightOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        closeSpotlight();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [spotlightOpen]);
 
   const isMacPlatform = useMemo(
     () => typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || ''),
@@ -459,6 +483,66 @@ const TopBar = () => {
         deleteNotification={deleteNotification}
         clearAll={clearAll}
       />
+
+      {/* Spotlight overlay — keyboard-triggered (⌘K / Ctrl+K), centered modal */}
+      {spotlightOpen && typeof document !== 'undefined' && createPortal(
+        <div
+          className="fixed inset-0 z-[12050] flex items-start justify-center px-4 pt-[16vh]"
+          onMouseDown={closeSpotlight}
+          role="dialog"
+          aria-modal="true"
+        >
+          <style>{`
+            @keyframes spotlightIn { from { opacity: 0; transform: translateY(-8px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+          `}</style>
+          <div className="fixed inset-0 bg-gray-900/40 backdrop-blur-sm" />
+          <div
+            className="relative w-full max-w-xl"
+            style={{ animation: 'spotlightIn 150ms cubic-bezier(0.4,0,0.2,1)' }}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div className="overflow-hidden rounded-2xl bg-white dark:bg-gray-900 shadow-2xl ring-1 ring-black/10 dark:ring-white/10">
+              <div className="flex items-center gap-3 px-4 py-3.5 border-b border-gray-100 dark:border-gray-800">
+                <Search className="h-5 w-5 text-gray-400 flex-shrink-0" />
+                <input
+                  ref={spotlightInputRef}
+                  className="flex-1 bg-transparent text-base text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none"
+                  placeholder="Rechercher matériel, presta, client..."
+                  type="search"
+                  value={searchQuery}
+                  onChange={handleSearchOverlay}
+                />
+                {searchQuery ? (
+                  <button
+                    onClick={() => { setSearchQuery(''); setResults([]); spotlightInputRef.current?.focus(); }}
+                    className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                    aria-label="Effacer"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                ) : (
+                  <kbd className="topbar-kbd flex-shrink-0">esc</kbd>
+                )}
+              </div>
+
+              {searchQuery.trim().length >= 3 ? (
+                <GlobalSearchDropdown
+                  sections={results}
+                  searchQuery={searchQuery}
+                  loading={isSearching}
+                  onClose={closeSpotlight}
+                  inline
+                />
+              ) : (
+                <div className="px-4 py-6 text-center text-sm text-gray-400 dark:text-gray-500">
+                  Tapez au moins 3 caractères pour rechercher.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
     </header>
   );
 };

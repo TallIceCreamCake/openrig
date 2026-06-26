@@ -4,6 +4,8 @@ import { Menu, X, ChevronDown, PanelLeftClose, PanelLeftOpen } from 'lucide-reac
 import { useAuth } from '../context/AuthContext';
 import { hasPerm } from '../utils/perm';
 import { supabase } from '../lib/supabase';
+import { useCompanySettings } from '../hooks/useCompanySettings';
+import { isFeatureEnabled } from '../utils/features';
 import {
   DEFAULT_MENU_LAYOUT,
   MenuLayoutNode,
@@ -23,6 +25,7 @@ const Sidebar = () => {
   const [menuLayout, setMenuLayout] = useState<MenuLayoutNode[]>(() => cloneMenuLayout(DEFAULT_MENU_LAYOUT));
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const { user } = useAuth();
+  const { settings } = useCompanySettings();
 
   // Labels are always visible inside the mobile drawer, regardless of the
   // desktop collapsed state.
@@ -83,6 +86,8 @@ const Sidebar = () => {
           const def = NAV_ITEM_DEFINITIONS[node.key];
           if (!def) return;
           if (def.perm && !hasPerm(user, def.perm)) return;
+          // Module toggle: hide items whose feature flag is disabled.
+          if (def.featureKey && !isFeatureEnabled(settings, def.featureKey, def.featureFallback ?? true)) return;
           result.push({ id: node.id, type: 'item', def });
         } else {
           const children = buildNodes(node.children);
@@ -93,7 +98,7 @@ const Sidebar = () => {
       return result;
     };
     return buildNodes(menuLayout);
-  }, [menuLayout, user]);
+  }, [menuLayout, user, settings]);
 
   useEffect(() => {
     const next: Record<string, boolean> = {};
